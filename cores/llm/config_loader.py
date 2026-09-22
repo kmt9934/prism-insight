@@ -216,6 +216,9 @@ def load_mcp_registry(
     if legacy_env_fallback is not None:
         raw = _merge_missing_env_from_legacy(raw, Path(legacy_env_fallback))
     raw = _interpolate_obj(raw)
+    from cores.market_data.kakao_login_guard import disable_kakao_krx_servers
+
+    raw = disable_kakao_krx_servers(raw)
 
     # Auto-detect shape and normalise to {"mcp": {"servers": {...}}}
     if "servers" in raw and "mcp" not in raw:

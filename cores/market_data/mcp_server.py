@@ -26,9 +26,10 @@
 바뀌는 것은 데이터가 어디서 오느냐뿐이다:
 
     기존   KRX Data Marketplace 스크래핑 (카카오 로그인)
-    지금   cores.market_data (KIS 전용)
+    지금   cores.market_data (KIS → FinanceDataReader → Naver)
 
-과거 provider-order 설정은 제거된 제공자를 다시 활성화하지 않는다.
+``krx`` 는 카카오 로그인 스크래핑이라 순서에 있어도 건너뛴다. 인증 실패는
+즉시 다음 소스로 넘어가고, 2FA 대기는 하지 않는다.
 
 ## 실패를 숨기지 않는다
 
@@ -325,12 +326,20 @@ def get_ticker_name(ticker: Union[str, int]) -> Dict[str, Any]:
 
 
 def apply_report_source_order() -> str:
-    """Keep the legacy startup hook while enforcing the single KIS provider."""
-    os.environ["PRISM_MARKET_DATA_SOURCES"] = "kis"
-    return "kis"
+    """Apply the report source order after removing Kakao/Playwright KRX."""
+    from cores.market_data.source_order import DEFAULT_ORDER, sanitize_source_order
+
+    override = (os.getenv("PRISM_REPORT_DATA_SOURCES") or "").strip()
+    general = (os.getenv("PRISM_MARKET_DATA_SOURCES") or "").strip()
+    chosen = sanitize_source_order(override or general or DEFAULT_ORDER)
+    os.environ["PRISM_MARKET_DATA_SOURCES"] = chosen
+    return chosen
 
 
 def main() -> None:
+    from cores.market_data.kakao_login_guard import install_kakao_login_block
+
+    install_kakao_login_block()
     logger.info("market data MCP server starting (sources=%s)", apply_report_source_order())
     mcp.run()
 

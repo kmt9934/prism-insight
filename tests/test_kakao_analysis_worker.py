@@ -252,20 +252,20 @@ def test_report_public_base_url_keeps_legacy_env_compatibility():
 def test_kakao_reports_default_to_recent_investor_flow_fallback():
     environ = {}
 
-    assert _configure_report_data_sources(environ) == "fdr,naver,krx"
-    assert environ["PRISM_REPORT_DATA_SOURCES"] == "fdr,naver,krx"
+    assert _configure_report_data_sources(environ) == "kis,fdr,naver"
+    assert environ["PRISM_REPORT_DATA_SOURCES"] == "kis,fdr,naver"
 
 
-def test_explicit_report_source_order_wins_over_kakao_default():
+def test_explicit_report_source_order_drops_kakao_krx_login():
     environ = {"PRISM_REPORT_DATA_SOURCES": "kis,fdr,krx"}
 
-    assert _configure_report_data_sources(environ) == "kis,fdr,krx"
+    assert _configure_report_data_sources(environ) == "kis,fdr"
 
 
 def test_legacy_report_source_order_gains_recent_flow_fallback():
     environ = {"PRISM_REPORT_DATA_SOURCES": "fdr,krx"}
 
-    assert _configure_report_data_sources(environ) == "fdr,naver,krx"
+    assert _configure_report_data_sources(environ) == "kis,fdr,naver"
 
 
 def test_kakao_reports_default_to_luna_with_medium_reasoning():

@@ -12,6 +12,10 @@ Overall Process:
 from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
+from cores.market_data.kakao_login_guard import install_kakao_login_block
+
+install_kakao_login_block()
+
 import cores.openai_debug  # noqa: F401 — OpenAI 400 error request body logging
 import argparse
 import asyncio

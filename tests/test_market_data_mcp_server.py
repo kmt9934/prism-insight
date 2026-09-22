@@ -176,15 +176,15 @@ def test_report_source_override_wins(monkeypatch):
     monkeypatch.setenv("PRISM_MARKET_DATA_SOURCES", "kis,fdr,krx")
     monkeypatch.setenv("PRISM_REPORT_DATA_SOURCES", "krx,fdr")
 
-    assert srv.apply_report_source_order() == "kis"
-    assert srv.os.environ["PRISM_MARKET_DATA_SOURCES"] == "kis"
+    assert srv.apply_report_source_order() == "fdr"
+    assert srv.os.environ["PRISM_MARKET_DATA_SOURCES"] == "fdr"
 
 
 def test_falls_back_to_the_general_chain_order(monkeypatch):
     monkeypatch.setenv("PRISM_MARKET_DATA_SOURCES", "kis,fdr,krx")
     monkeypatch.setenv("PRISM_REPORT_DATA_SOURCES", "")
 
-    assert srv.apply_report_source_order() == "kis"
+    assert srv.apply_report_source_order() == "kis,fdr"
 
 
 # --- 도구 계약 유지 -----------------------------------------------------------

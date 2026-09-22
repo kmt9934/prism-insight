@@ -21,7 +21,7 @@ from kakao_bot.ports.analysis import AnalysisPort
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_KAKAO_REPORT_DATA_SOURCES = "fdr,naver,krx"
+DEFAULT_KAKAO_REPORT_DATA_SOURCES = "kis,fdr,naver"
 DEFAULT_KAKAO_REPORT_MODEL = "gpt-5.6-luna"
 DEFAULT_KAKAO_REPORT_EFFORT = "medium"
 DEFAULT_KAKAO_REPORT_MAX_CONCURRENCY = "3"
@@ -191,19 +191,23 @@ def _report_public_base_url(environ: Mapping[str, str] | None = None) -> str | N
 def _configure_report_data_sources(
     environ: MutableMapping[str, str] | None = None,
 ) -> str:
-    """Give Kakao reports a public recent-flow fallback without overriding ops.
+    """Give Kakao reports public fallbacks and drop Kakao/Playwright KRX.
 
-    ``fdr,krx`` was deployed as an outage-era fallback before the public recent
-    flow source existed. Upgrade only that exact legacy value; a deliberately
-    configured order such as ``kis,fdr,krx`` remains untouched.
+    ``krx`` starts an interactive Data Marketplace login. It is removed from
+    every configured order, including an explicit one, so a report subprocess
+    cannot wait on 2FA.
     """
 
+    from cores.market_data.source_order import sanitize_source_order
+
     values = os.environ if environ is None else environ
-    if values.get("PRISM_REPORT_DATA_SOURCES") == "fdr,krx":
-        values["PRISM_REPORT_DATA_SOURCES"] = DEFAULT_KAKAO_REPORT_DATA_SOURCES
-    return values.setdefault(
-        "PRISM_REPORT_DATA_SOURCES", DEFAULT_KAKAO_REPORT_DATA_SOURCES
-    )
+    raw = values.get("PRISM_REPORT_DATA_SOURCES")
+    if not raw or raw.strip() == "fdr,krx":
+        chosen = DEFAULT_KAKAO_REPORT_DATA_SOURCES
+    else:
+        chosen = sanitize_source_order(raw)
+    values["PRISM_REPORT_DATA_SOURCES"] = chosen
+    return chosen
 
 
 def _configure_report_model(

@@ -174,10 +174,10 @@ mcp:
   servers:
     kospi_kosdaq:
       command: "python3"
-      args: ["-m", "kospi_kosdaq_stock_server"]
+      args: ["-m", "cores.market_data.mcp_server"]
       env:
-        KAKAO_ID: "your_kakao_email@example.com"
-        KAKAO_PW: "your_kakao_password"
+        PYTHONPATH: "."
+        PRISM_MARKET_DATA_SOURCES: "kis,fdr,naver"
 
     firecrawl: firecrawl-mcp
     perplexity: npx -y @perplexity-ai/mcp-server
@@ -189,9 +189,7 @@ openai:
   reasoning_effort: medium
 ```
 
-> **Note**: Kakao credentials are required for Korean market data (KRX Data Marketplace authentication).
->
-> **2-Step Verification**: If enabled on your Kakao account, you'll need to confirm in the app for each analysis. To disable: Kakao App > Settings > Kakao Account > Account Security > 2-Step Verification 'Off'.
+> **Note**: Korean prices come from KIS, with FinanceDataReader and Naver as public fallbacks. Kakao login for the KRX Data Marketplace is disabled. Do not set `KAKAO_ID` / `KAKAO_PW`. A stale config that still launches the old stock server is rewritten before startup. See [Market data without Kakao login](MARKET_DATA_NO_KAKAO_LOGIN.md).
 
 ### Step 6: Install Playwright (PDF Generation)
 

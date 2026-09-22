@@ -177,32 +177,31 @@ class TestConfiguredOrder:
         monkeypatch.setenv("PRISM_MARKET_DATA_SOURCES", "fdr,krx")
         set_default_chain(None)
 
-        assert default_chain().names == ["kis"]
+        assert default_chain().names == ["fdr"]
 
     def test_a_single_source_is_allowed(self, monkeypatch):
-        # A host that cannot reach KRX at all should not need a code change.
         monkeypatch.setenv("PRISM_MARKET_DATA_SOURCES", "fdr")
         set_default_chain(None)
 
-        assert default_chain().names == ["kis"]
+        assert default_chain().names == ["fdr"]
 
     def test_naver_can_be_configured_as_an_investor_flow_fallback(self, monkeypatch):
         monkeypatch.setenv("PRISM_MARKET_DATA_SOURCES", "fdr,naver,krx")
         set_default_chain(None)
 
-        assert default_chain().names == ["kis"]
+        assert default_chain().names == ["fdr", "naver"]
 
     def test_an_unknown_name_is_ignored_rather_than_fatal(self, monkeypatch):
         monkeypatch.setenv("PRISM_MARKET_DATA_SOURCES", "nonsense,fdr")
         set_default_chain(None)
 
-        assert default_chain().names == ["kis"]
+        assert default_chain().names == ["fdr"]
 
-    def test_the_default_is_kis_only(self, monkeypatch):
+    def test_the_default_skips_kakao_krx_login(self, monkeypatch):
         monkeypatch.delenv("PRISM_MARKET_DATA_SOURCES", raising=False)
         set_default_chain(None)
 
-        assert default_chain().names == ["kis"]
+        assert default_chain().names == ["kis", "fdr", "naver"]
 
 
 class TestCallerFacingApi:
