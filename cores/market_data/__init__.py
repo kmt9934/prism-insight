@@ -1,7 +1,8 @@
-"""KIS-only Korean market data with explicit unsupported/missing results.
+"""Korean market data from KIS, FinanceDataReader, and Naver.
 
-Legacy provider environment variables cannot reactivate retired data sources.
-The compatibility function names are API names, not exchange-login clients.
+The compatibility function names are API names, not an exchange-login client.
+``krx`` in ``PRISM_MARKET_DATA_SOURCES`` is ignored: that name is the Kakao
+Playwright session, which the morning batch must not wait on.
 """
 
 from __future__ import annotations
@@ -13,7 +14,10 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from cores.market_data.fdr_source import FdrSource
 from cores.market_data.kis_source import KisSource
+from cores.market_data.naver_source import NaverSource
+from cores.market_data.source_order import DEFAULT_ORDER, sanitize_source_order
 from cores.market_data.source import (
     MarketDataSource,
     SourceChain,
@@ -24,7 +28,9 @@ from cores.market_data.source import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "FdrSource",
     "KisSource",
+    "NaverSource",
     "MarketDataSource",
     "SourceChain",
     "Unavailable",
@@ -44,7 +50,11 @@ __all__ = [
     "get_nearest_business_day_in_a_week",
 ]
 
-_DEFAULT_ORDER = "kis"
+_BUILDERS = {
+    "kis": KisSource,
+    "fdr": FdrSource,
+    "naver": NaverSource,
+}
 
 _chain: SourceChain | None = None
 _KST = ZoneInfo("Asia/Seoul")
@@ -55,7 +65,7 @@ def _now_kst() -> datetime:
 
 
 def default_chain() -> SourceChain:
-    """Build the sole production provider; ignore stale provider-order settings."""
+    """Build the process chain. Kakao/Playwright KRX is never included."""
     global _chain
     if _chain is None:
         remote_url = os.getenv("PRISM_MARKET_DATA_REMOTE_URL", "").strip()
@@ -64,10 +74,11 @@ def default_chain() -> SourceChain:
             _chain = SourceChain([RemoteKisSource(remote_url)])
             logger.info("market data sources: %s", " -> ".join(_chain.names))
             return _chain
-        order = os.getenv("PRISM_MARKET_DATA_SOURCES", _DEFAULT_ORDER)
-        if order.strip().lower() != "kis":
-            logger.warning("Retired market-data provider settings ignored; KIS is the only provider")
-        _chain = SourceChain([KisSource()])
+        order = sanitize_source_order(
+            os.getenv("PRISM_MARKET_DATA_SOURCES", DEFAULT_ORDER)
+        )
+        sources: list[MarketDataSource] = [_BUILDERS[name]() for name in order.split(",")]
+        _chain = SourceChain(sources)
         logger.info("market data sources: %s", " -> ".join(_chain.names))
     return _chain
 

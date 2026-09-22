@@ -408,7 +408,7 @@ npm run dev
 ## MCP Servers
 
 ### Korean Market
-- **[kospi_kosdaq](https://github.com/dragon1086/kospi-kosdaq-stock-server)** — KRX stock data
+- **kospi_kosdaq** — in-repo `cores.market_data.mcp_server` (KIS, FinanceDataReader, Naver). Kakao/Playwright KRX login is disabled. See [docs/MARKET_DATA_NO_KAKAO_LOGIN.md](docs/MARKET_DATA_NO_KAKAO_LOGIN.md).
 - **[firecrawl](https://github.com/mendableai/firecrawl-mcp-server)** — Web crawling
 - **[perplexity](https://github.com/perplexityai/modelcontextprotocol)** — Web search
 - **[sqlite](https://github.com/modelcontextprotocol/servers-archived)** — Trading simulation DB

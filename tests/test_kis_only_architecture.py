@@ -15,9 +15,9 @@ from cores.kis_sector_map import parse_sector_master
 
 ROOT = Path(__file__).resolve().parents[1]
 BANNED = {
-    "krx_data_client", "kospi_kosdaq_stock_server", "pykrx", "FinanceDataReader",
+    "krx_data_client", "kospi_kosdaq_stock_server", "pykrx",
     "cores.krx_openapi_snapshot", "cores.naver_market_snapshot",
-    "cores.market_data.krx_source", "cores.market_data.fdr_source", "cores.market_data.naver_source",
+    "cores.market_data.krx_source",
 }
 
 
@@ -45,26 +45,44 @@ def test_all_executable_sources_have_no_retired_imports_or_dynamic_imports():
 
 
 def test_retired_provider_files_dependencies_and_login_template_are_removed():
-    for file in ("cores/krx_openapi_snapshot.py", "cores/naver_market_snapshot.py", "cores/market_data/krx_source.py", "cores/market_data/fdr_source.py", "cores/market_data/naver_source.py"):
+    for file in ("cores/krx_openapi_snapshot.py", "cores/naver_market_snapshot.py", "cores/market_data/krx_source.py"):
         assert not (ROOT / file).exists()
+    for file in ("cores/market_data/fdr_source.py", "cores/market_data/naver_source.py"):
+        assert (ROOT / file).exists()
     requirements = (ROOT / "requirements.txt").read_text().lower()
-    for name in ("pykrx", "finance-datareader", "kospi_kosdaq_stock_server"):
+    for name in ("pykrx", "kospi_kosdaq_stock_server"):
         assert name not in requirements
-    env = (ROOT / ".env.example").read_text()
-    for variable in ("KRX_ID=", "KRX_PW=", "KRX_OPENAPI_AUTH_KEY=", "KAKAO_ID=", "KAKAO_PW="):
-        assert variable not in env
+    assert "finance-datareader" in requirements
+    env_lines = [
+        line.strip()
+        for line in (ROOT / ".env.example").read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    for variable in ("KRX_ID=", "KRX_PW=", "KAKAO_ID=", "KAKAO_PW=", "KRX_OPENAPI_AUTH_KEY="):
+        assert not any(line.startswith(variable) for line in env_lines)
     config = (ROOT / "mcp_agent.config.yaml.example").read_text()
     assert "cores.market_data.mcp_server" in config
     for retired in ("kospi_kosdaq_stock_server", "KRX_ID:", "KRX_PW:", "KAKAO_ID:", "KAKAO_PW:"):
         assert retired not in config
 
 
-@pytest.mark.parametrize("order", ["", "krx", "fdr,krx", "kis,naver,krx", "unknown", "kis"])
-def test_stale_config_cannot_reactivate_retired_providers(monkeypatch, order):
+@pytest.mark.parametrize(
+    ("order", "expected"),
+    [
+        ("", ["kis", "fdr", "naver"]),
+        ("krx", ["kis", "fdr", "naver"]),
+        ("fdr,krx", ["fdr"]),
+        ("kis,naver,krx", ["kis", "naver"]),
+        ("unknown", ["kis", "fdr", "naver"]),
+        ("kis", ["kis"]),
+    ],
+)
+def test_stale_config_cannot_reactivate_kakao_krx_login(monkeypatch, order, expected):
     monkeypatch.setenv("PRISM_MARKET_DATA_SOURCES", order)
     data.set_default_chain(None)
     try:
-        assert data.default_chain().names == ["kis"]
+        assert data.default_chain().names == expected
+        assert "krx" not in data.default_chain().names
     finally:
         data.set_default_chain(None)
 

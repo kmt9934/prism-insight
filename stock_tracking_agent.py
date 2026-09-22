@@ -45,6 +45,9 @@ logger = logging.getLogger(__name__)
 
 # MCP related imports
 from mcp_agent.app import MCPApp
+from cores.market_data.kakao_login_guard import install_kakao_login_block
+
+install_kakao_login_block()
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from cores.llm.openai_responses_llm import OpenAIResponsesLLM as OpenAIAugmentedLLM
 from cores.llm.codex_oauth_fast_backend import generate_codex_fast_async

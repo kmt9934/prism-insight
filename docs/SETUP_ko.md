@@ -196,8 +196,7 @@ mcp:
       args: ["-m", "cores.llm.time_mcp_server"]
 ```
 
-> **참고**: 현재 한국 시장 MCP는 저장소 내부 market-data 소스 체인을 사용합니다.
-> 운영 환경에서는 오케스트레이터와 같은 Python을 `PRISM_MCP_PYTHON`으로 지정하십시오.
+> **참고**: 한국 시장 MCP는 저장소 내부 소스 체인(KIS → FinanceDataReader → Naver)을 사용합니다. 카카오/Playwright KRX 로그인은 꺼져 있으며, 2FA를 기다리지 않습니다. 운영 환경에서는 오케스트레이터와 같은 Python을 `PRISM_MCP_PYTHON`으로 지정하십시오. 자세한 내용은 [카카오 로그인 비활성화](MARKET_DATA_NO_KAKAO_LOGIN.md)를 보십시오.
 
 ### 6단계: Playwright 설치 (PDF 생성용)
 

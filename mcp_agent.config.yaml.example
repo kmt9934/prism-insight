@@ -35,7 +35,7 @@ mcp:
       env:
         # Use the application's Python environment and repository working directory.
         PYTHONPATH: "."
-        PRISM_MARKET_DATA_SOURCES: "kis"
+        PRISM_MARKET_DATA_SOURCES: "kis,fdr,naver"
 
     perplexity:
       command: "npx"
