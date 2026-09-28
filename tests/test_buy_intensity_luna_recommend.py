@@ -161,11 +161,32 @@ def test_persist_last_never_touches_dotenv(tmp_path):
     assert env_file.read_text(encoding="utf-8") == "KEEP=1\n"
 
 
-def test_read_env_flags_are_snapshot_only(monkeypatch):
+def test_read_env_flags_are_snapshot_only(monkeypatch, tmp_path):
     monkeypatch.setenv("REGIME_MIN_SCORE_FLOOR", "true")
     monkeypatch.delenv("REGIME_WEAK_NO_TOPDOWN", raising=False)
     monkeypatch.setenv("REGIME_HIVOL_OVERRIDE", "active")
-    flags = read_env_flags()
+    flags = read_env_flags(tmp_path / "missing.env")
     assert flags["REGIME_MIN_SCORE_FLOOR"] == "true"
     assert flags["REGIME_WEAK_NO_TOPDOWN"] == "unset"
     assert flags["REGIME_HIVOL_OVERRIDE"] == "active"
+
+
+def test_read_env_flags_reflect_dotenv_file_without_mutating_env(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    original = (
+        "REGIME_MIN_SCORE_FLOOR=false\n"
+        "REGIME_WEAK_NO_TOPDOWN=true\n"
+        "REGIME_HIVOL_OVERRIDE=off\n"
+    )
+    env_file.write_text(original, encoding="utf-8")
+    monkeypatch.setenv("REGIME_MIN_SCORE_FLOOR", "true")
+    monkeypatch.delenv("REGIME_WEAK_NO_TOPDOWN", raising=False)
+    monkeypatch.delenv("REGIME_HIVOL_OVERRIDE", raising=False)
+
+    flags = read_env_flags(env_file)
+
+    assert flags["REGIME_MIN_SCORE_FLOOR"] == "true"
+    assert flags["REGIME_WEAK_NO_TOPDOWN"] == "true"
+    assert flags["REGIME_HIVOL_OVERRIDE"] == "off"
+    assert "REGIME_WEAK_NO_TOPDOWN" not in mod.os.environ
+    assert env_file.read_text(encoding="utf-8") == original

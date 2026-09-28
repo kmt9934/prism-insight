@@ -33,6 +33,11 @@ tools/deploy_live.sh
 
 배포 후에는 첫 정규 cron 실행 결과를 따로 확인합니다 (스모크 통과 ≠ 정규 배치 성공).
 
+**`.env`·`docker/crontab`을 고친 뒤에는 반드시 컨테이너를 재생성합니다.** 파일 하나짜리 마운트라서
+편집기가 파일을 새로 바꿔 쓰면 컨테이너는 계속 옛 내용을 읽습니다 (고치기만 해서는 반영되지 않습니다).
+`docker compose up -d --force-recreate prism-insight` 후 `tools/check_live_config.sh`로 모두 `OK`인지
+확인합니다 (값은 출력하지 않고 파일 이름과 OK/STALE만 표시, `deploy_live.sh` 끝에서도 자동 실행).
+
 ## English
 
 Rules
@@ -55,3 +60,8 @@ and leaves the containers untouched.
 First sync with leftover local edits: preserve them on a local backup branch
 (`git switch -c ops/pre-sync-mini2-<date> && git commit -am "backup ..."`, not pushed),
 then run the script. After deploying, check the first scheduled cron run separately.
+
+**After editing `.env` or `docker/crontab`, recreate the container** — editing alone does not take
+effect: these are single-file bind mounts, and an editor that replaces the file leaves the container
+on the old inode. Run `docker compose up -d --force-recreate prism-insight`, then
+`tools/check_live_config.sh` (names + OK/STALE only, never values; also run at the end of `deploy_live.sh`).

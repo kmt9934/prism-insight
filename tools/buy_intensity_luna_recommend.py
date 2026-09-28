@@ -114,12 +114,26 @@ def quiet_skip_reason(
     return "unchanged_hold"
 
 
-def read_env_flags() -> dict[str, str]:
-    """Read-only snapshot of buy-intensity related flags. Never writes .env."""
+def read_env_flags(env_path: Optional[Path] = PROJECT_ROOT / ".env") -> dict[str, str]:
+    """Read-only snapshot of buy-intensity related flags. Never writes .env.
+
+    Process environment wins over the .env file (load_dotenv override=False semantics),
+    but os.environ itself is not modified.
+    """
+    file_values: dict[str, Optional[str]] = {}
+    if env_path is not None and Path(env_path).is_file():
+        try:
+            from dotenv import dotenv_values
+
+            file_values = dict(dotenv_values(dotenv_path=str(env_path)))
+        except Exception as exc:  # noqa: BLE001 - fail-soft input
+            logger.warning(".env read failed: %s", exc)
     flags: dict[str, str] = {}
     for key in SUGGEST_KEYS:
         if key in os.environ:
             flags[key] = os.environ.get(key, "")
+        elif file_values.get(key) is not None:
+            flags[key] = str(file_values[key])
         else:
             flags[key] = "unset"
     return flags
@@ -235,7 +249,7 @@ def collect_inputs(
 ) -> dict[str, Any]:
     """Gather fail-soft context. Missing sources become empty fields."""
     session = session or date.today()
-    flags = read_env_flags()
+    flags = read_env_flags(root / ".env")
     regime_log = _latest_jsonl_regime(root / "logs" / "regime_history.jsonl")
     status = _status_regime(root / "status")
     afternoon = _afternoon_hints(session, root / "reports", root / "logs")

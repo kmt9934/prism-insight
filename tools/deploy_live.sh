@@ -87,3 +87,6 @@ echo "deployed ${COMMIT}"
 echo "running containers:"
 docker ps --filter name=prism --format '  {{.Names}}  {{.Image}}  {{.Status}}'
 echo "rollback: tools/deploy_live.sh ${PREVIOUS}"
+
+echo "live config check:"
+tools/check_live_config.sh
