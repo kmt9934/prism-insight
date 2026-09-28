@@ -9,6 +9,7 @@ import numpy as np
 import logging
 import os
 from typing import Optional
+from prism_core.env_config import env_bool
 from prism_core.screening_price_evidence import build_screening_price_evidence
 from prism_core.ohlcv_shape import normalize_single_ticker_ohlcv
 from cores.kis_market_snapshot import (
@@ -1260,8 +1261,7 @@ def _get_regime_slots(market_regime: str) -> tuple:
     # ON 시 sideways/moderate_bear의 top-down 슬롯을 0으로 → 급락 휩쏘장에서 momentum chase
     # 매수를 접고 가치형 bottom-up만 남긴다(총 슬롯도 감소 = 매수 절제). strong_bear는 이미 (0,3).
     if (td > 0 and market_regime in ("sideways", "moderate_bear")
-            and os.getenv("REGIME_WEAK_NO_TOPDOWN", "false").strip().lower()
-            in ("1", "true", "yes", "on")):
+            and env_bool("REGIME_WEAK_NO_TOPDOWN", False)):
         logger.info("[REGIME_SLOTS] weak-regime top-down 억제: %s (%d,%d)->(0,%d)",
                     market_regime, td, bu, bu)
         return (0, bu)
@@ -1435,8 +1435,7 @@ def _emit_weak_regime_third_slot_shadow(
         or max_selections != 2
         or not trade_date
         or trigger_mode not in {"morning", "afternoon"}
-        or os.getenv("REGIME_WEAK_NO_TOPDOWN", "false").strip().lower()
-        not in {"1", "true", "yes", "on"}
+        or not env_bool("REGIME_WEAK_NO_TOPDOWN", False)
     ):
         return
     try:

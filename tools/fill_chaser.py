@@ -103,6 +103,25 @@ except Exception:
 _DEPRECATED_ENV: List[str] = []
 
 
+def _load_env_config():
+    """Load the dependency-free reader by path; direct runs may lack the repo on sys.path."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "prism_fill_chaser_env_config", PROJECT_ROOT / "prism_core" / "env_config.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_env_config = _load_env_config()
+parse_bool, parse_float, parse_int = (
+    _env_config.parse_bool, _env_config.parse_float, _env_config.parse_int,
+)
+
+
 def _env(suffix: str, default: Optional[str] = None) -> Optional[str]:
     """Read FILL_CHASER_<suffix>, falling back to the deprecated LOOP_C_<suffix>."""
     val = os.getenv("FILL_CHASER_" + suffix)
@@ -116,10 +135,15 @@ def _env(suffix: str, default: Optional[str] = None) -> Optional[str]:
 
 
 def _env_flag(suffix: str, default: bool) -> bool:
-    raw = _env(suffix)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+    return parse_bool(_env(suffix), default, "FILL_CHASER_" + suffix)
+
+
+def _env_int(suffix: str, default: int) -> int:
+    return parse_int(_env(suffix), default, "FILL_CHASER_" + suffix)
+
+
+def _env_float(suffix: str, default: float) -> float:
+    return parse_float(_env(suffix), default, "FILL_CHASER_" + suffix)
 
 
 def _load_fill_chaser_lifecycle_mode() -> str:
@@ -150,26 +174,26 @@ FILL_CHASER_ENABLED = _env_flag("ENABLED", True) and _FILL_CHASER_LIFECYCLE_MODE
 FILL_CHASER_LIVE = (
     _env_flag("LIVE", False) and _FILL_CHASER_LIFECYCLE_MODE == "live"
 )
-LOCK_TTL_SEC = int(_env("LOCK_TTL_SEC", "300"))
+LOCK_TTL_SEC = _env_int("LOCK_TTL_SEC", 300)
 # Chase an order only after it has been unfilled this long.
-CHASE_AFTER_SEC = int(_env("CHASE_AFTER_SEC", "60"))
+CHASE_AFTER_SEC = _env_int("CHASE_AFTER_SEC", 60)
 # Leave brand-new orders alone for this long (another loop may have just placed it).
-GRACE_SEC = int(_env("GRACE_SEC", "20"))
+GRACE_SEC = _env_int("GRACE_SEC", 20)
 # Each chase step moves the limit this fraction toward the market.
-CHASE_STEP_PCT = float(_env("CHASE_STEP_PCT", "0.3"))
+CHASE_STEP_PCT = _env_float("CHASE_STEP_PCT", 0.3)
 # BUY ceiling = slippage budget: how far above the original limit we are willing
 # to pay to secure a fill. Env value is a percent (e.g. "3.0" = 3%); stored as a
 # fraction. Beyond it -> CANCEL (don't chase into the top of a runaway spike).
-BUY_MAX_PREMIUM_PCT = float(_env("BUY_MAX_PREMIUM_PCT", "3.0")) / 100.0
+BUY_MAX_PREMIUM_PCT = _env_float("BUY_MAX_PREMIUM_PCT", 3.0) / 100.0
 # Fill-priority for BUY: when the market is within the slippage budget, place a
 # MARKETABLE limit (cross the spread) so the order fills NOW instead of trailing
 # the market CHASE_STEP_PCT-per-step and never catching a still-rising price.
 # The limit is set BUY_CROSS_PAD_PCT above the live market, then capped at the
 # budget ceiling. Disable to fall back to the legacy sub-market creep.
 BUY_CROSS = _env_flag("BUY_CROSS", True)
-BUY_CROSS_PAD_PCT = float(_env("BUY_CROSS_PAD_PCT", "0.1")) / 100.0
+BUY_CROSS_PAD_PCT = _env_float("BUY_CROSS_PAD_PCT", 0.1) / 100.0
 # Max number of amend steps before giving up and (optionally) cancelling.
-MAX_CHASES = int(_env("MAX_CHASES", "5"))
+MAX_CHASES = _env_int("MAX_CHASES", 5)
 # Whether to cancel a buy order once the ceiling is hit (else just stop chasing).
 CANCEL_ON_CEILING = _env_flag("CANCEL_ON_CEILING", True)
 

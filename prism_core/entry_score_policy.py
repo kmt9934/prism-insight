@@ -9,7 +9,8 @@ mandatory at the independent broker boundary.
 from __future__ import annotations
 
 import math
-import os
+
+from prism_core.env_config import env_bool
 
 
 _REGIME_MIN_SCORE_FLOORS = {
@@ -19,9 +20,7 @@ _REGIME_MIN_SCORE_FLOORS = {
 
 
 def regime_min_score_floor_enabled() -> bool:
-    return os.getenv("REGIME_MIN_SCORE_FLOOR", "true").strip().lower() in {
-        "1", "true", "yes", "on"
-    }
+    return env_bool("REGIME_MIN_SCORE_FLOOR", True)
 
 
 def _regime(value: str | None) -> str:

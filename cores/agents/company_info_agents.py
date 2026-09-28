@@ -1,7 +1,8 @@
 from cores.agents.report_agent import ReportAgent as Agent
 
 
-def create_company_status_agent(company_name, company_code, reference_date, urls, language: str = "ko"):
+def create_company_status_agent(company_name, company_code, reference_date, urls, language: str = "ko",
+                                prefetched_dart: str | None = None):
     """Create company status analysis agent
 
     Args:
@@ -15,8 +16,10 @@ def create_company_status_agent(company_name, company_code, reference_date, urls
         Agent: Company status analysis agent
     """
 
+    dart_prefix = f"{prefetched_dart}\n\n" if prefetched_dart else ""
+
     if language == "en":
-        instruction = f"""You are a company status analysis expert. You need to collect and analyze data provided on the company status page of the WiseReport website and write a comprehensive report that investors can easily understand.
+        instruction = dart_prefix + f"""You are a company status analysis expert. You need to collect and analyze data provided on the company status page of the WiseReport website and write a comprehensive report that investors can easily understand.
                         When accessing URLs, use the firecrawl_scrape tool and set the formats parameter to ["markdown"] and the onlyMainContent parameter to true.
                         When collecting data, focus on tables rather than charts.
                         Please write as detailed, accurate, and rich as possible.
@@ -96,7 +99,7 @@ def create_company_status_agent(company_name, company_code, reference_date, urls
                         ##Analysis Date: {reference_date}(YYYYMMDD format)
                         """
     else:  # Korean (default)
-        instruction = f"""당신은 기업 현황 분석 전문가입니다. WiseReport 웹사이트의 기업현황 페이지에서 제공하는 데이터를 수집하고 분석하여 투자자가 이해하기 쉬운 종합 보고서를 작성해야 합니다.
+        instruction = dart_prefix + f"""당신은 기업 현황 분석 전문가입니다. WiseReport 웹사이트의 기업현황 페이지에서 제공하는 데이터를 수집하고 분석하여 투자자가 이해하기 쉬운 종합 보고서를 작성해야 합니다.
                         URL 접속 시 firecrawl_scrape tool을 사용하고 formats 파라미터는 ["markdown"]로, onlyMainContent 파라미터는 true로 설정하세요.
                         데이터 수집 시 차트보다는 테이블 위주로 데이터를 수집하세요.
                         가능한한 자세하고 정확하고 풍부하게 작성해주세요.

@@ -124,8 +124,9 @@ def test_configured_entry_amount_scales_by_market():
 
 
 @pytest.mark.parametrize("raw,enabled", [
-    (None, True), ("", False), ("false", False), ("0", False), ("no", False),
-    ("off", False), ("bogus", False),
+    # Empty and unparseable values keep the default (enabled) with a warning.
+    (None, True), ("", True), ("false", False), ("0", False), ("no", False),
+    ("off", False), ("bogus", True), ('"false"', False), ("false # rollback", False),
     ("1", True), ("true", True), ("TRUE", True), ("yes", True), ("on", True),
     ("  On  ", True),
 ])

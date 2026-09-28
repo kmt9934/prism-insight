@@ -53,6 +53,34 @@ def get_requested_session_prices(tickers) -> Dict[str, float]:
     return prices
 
 
+_PLACEHOLDER_NAME_RE = re.compile(r'^stock(?:_|$)', re.IGNORECASE)
+
+
+def _is_placeholder_company_name(ticker: str, company_name: str) -> bool:
+    name = (company_name or '').strip()
+    if not name or _PLACEHOLDER_NAME_RE.match(name):
+        return True
+    return name == str(ticker or '').strip()
+
+
+def resolve_company_name(ticker: str, company_name: str) -> str:
+    """Replace placeholder names (Stock, Stock_123456) with the listing name."""
+    ticker = str(ticker or '').strip()
+    company_name = (company_name or '').strip()
+    if not ticker or not _is_placeholder_company_name(ticker, company_name):
+        return company_name
+    try:
+        from cores.market_data import get_market_ticker_name
+        resolved = get_market_ticker_name(ticker)
+    except Exception as e:
+        logger.debug(f"Company name lookup failed for {ticker}: {e}")
+        return company_name or ticker
+    if resolved and resolved != ticker:
+        logger.info(f"Resolved company name for {ticker}: {resolved}")
+        return resolved
+    return company_name or ticker
+
+
 def extract_ticker_info(report_path: str) -> Tuple[str, str]:
     """
     Extract ticker code and company name from report file path.
@@ -71,12 +99,12 @@ def extract_ticker_info(report_path: str) -> Tuple[str, str]:
         if match:
             ticker = match.group(1)
             company_name = match.group(2)
-            return ticker, company_name
+            return ticker, resolve_company_name(ticker, company_name)
         else:
             # Legacy fallback
             parts = file_name.split('_')
             if len(parts) >= 2:
-                return parts[0], parts[1]
+                return parts[0], resolve_company_name(parts[0], parts[1])
 
         logger.error(f"Cannot extract ticker info from filename: {file_name}")
         return "", ""

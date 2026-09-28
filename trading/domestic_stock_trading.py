@@ -178,7 +178,7 @@ class DomesticStockTrading:
                 logger.error("      - 'my_app' should start with 'PS' (NOT 'PSVT')")
                 logger.error("      - 'accounts'에 실전투자 계좌를 올바르게 설정하세요")
             else:
-                logger.error("      - 'paper_app' should start with 'PSVT'")
+                logger.error("      - 'paper_app' should be the 모의투자 key (PSVT* or PS*)")
                 logger.error("      - 'accounts'에 모의투자 계좌를 올바르게 설정하세요")
             logger.error("=" * 60)
             raise RuntimeError(f"Credential mismatch for {self.mode} mode: {e}") from e

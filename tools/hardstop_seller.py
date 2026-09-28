@@ -86,6 +86,8 @@ except Exception:
 # crontab survive the rename; main() warns once for any legacy key in use.
 _DEPRECATED_ENV = []
 
+from prism_core.env_config import parse_bool, parse_int  # noqa: E402
+
 
 def _env(suffix, default=None):
     """Read HARDSTOP_<suffix>, falling back to the deprecated LOOP_A_<suffix>."""
@@ -100,19 +102,20 @@ def _env(suffix, default=None):
 
 
 def _env_flag(suffix, default):
-    raw = _env(suffix)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+    return parse_bool(_env(suffix), default, "HARDSTOP_" + suffix)
+
+
+def _env_int(suffix, default):
+    return parse_int(_env(suffix), default, "HARDSTOP_" + suffix)
 
 
 HARDSTOP_ENABLED = _env_flag("ENABLED", True)            # master kill switch
 HARDSTOP_LIVE = _env_flag("LIVE", False)                 # False => SHADOW (no real orders)
-LOCK_TTL_SEC = int(_env("LOCK_TTL_SEC", "300"))
+LOCK_TTL_SEC = _env_int("LOCK_TTL_SEC", 300)
 # inflight SELL 레코드 TTL. 이보다 오래된 OPEN 레코드는 stale로 보고 중복방지 대상에서 제외한다.
 # (hardstop 하드스탑은 장중 시장가라 정상 주문은 수 초 내 체결됨. fill-chaser가 SHADOW라
 #  미정리된 레코드가 손절을 영구 차단하던 버그 방지.)
-INFLIGHT_TTL_SEC = int(_env("INFLIGHT_TTL_SEC", "900"))  # 15분
+INFLIGHT_TTL_SEC = _env_int("INFLIGHT_TTL_SEC", 900)  # 15분
 DB_PATH = _env("DB") or os.getenv("STOCK_TRACKING_DB") \
     or str(PROJECT_ROOT / "stock_tracking_db.sqlite")
 # Reuse the same channel the batch/system already broadcasts to (TELEGRAM_CHANNEL_ID).

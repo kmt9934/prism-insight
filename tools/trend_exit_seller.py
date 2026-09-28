@@ -128,6 +128,8 @@ except Exception:
 # crontab survive the rename; main() warns once for any legacy key in use.
 _DEPRECATED_ENV = []
 
+from prism_core.env_config import parse_bool, parse_int  # noqa: E402
+
 
 def _env(suffix, default=None):
     """Read TREND_EXIT_<suffix>, falling back to the deprecated LOOP_B_<suffix>."""
@@ -142,21 +144,22 @@ def _env(suffix, default=None):
 
 
 def _env_flag(suffix, default):
-    raw = _env(suffix)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+    return parse_bool(_env(suffix), default, "TREND_EXIT_" + suffix)
+
+
+def _env_int(suffix, default):
+    return parse_int(_env(suffix), default, "TREND_EXIT_" + suffix)
 
 
 TREND_EXIT_ENABLED = _env_flag("ENABLED", True)             # master kill switch
 TREND_EXIT_LIVE = _env_flag("LIVE", False)                  # False => SHADOW (no real orders)
-TREND_EXIT_CONFIRM_CHECKS = int(_env("CONFIRM_CHECKS", "2"))   # N consecutive day-breaches to act
+TREND_EXIT_CONFIRM_CHECKS = _env_int("CONFIRM_CHECKS", 2)   # N consecutive day-breaches to act
 TREND_EXIT_CLOSE_WINDOW = _env_flag("CLOSE_WINDOW", False)     # set true on the close-time cron line
-LOCK_TTL_SEC = int(_env("LOCK_TTL_SEC", "300"))
+LOCK_TTL_SEC = _env_int("LOCK_TTL_SEC", 300)
 # 신규매수 유예(분): buy_date 기준 이보다 어린 포지션은 추세이탈 청산 제외.
 # 매수 배치와 loop 청산이 같은 시간대(마감 윈도우 등)에 부딪혀 20초 만에 churn되던 것 방지.
 # 추세는 갓 산 포지션에서 판정 불가. 0이면 비활성. KR 마감 15:30 고려해 기본 30분.
-MIN_HOLD_MIN = int(_env("MIN_HOLD_MIN", "30"))
+MIN_HOLD_MIN = _env_int("MIN_HOLD_MIN", 30)
 DB_PATH = _env("DB") or os.getenv("STOCK_TRACKING_DB") \
     or str(PROJECT_ROOT / "stock_tracking_db.sqlite")
 # Reuse the same channel the batch/system already broadcasts to (TELEGRAM_CHANNEL_ID).

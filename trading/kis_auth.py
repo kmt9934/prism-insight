@@ -733,8 +733,9 @@ def validate_credentials(app_key: str, mode: str) -> Tuple[bool, str]:
     """
     Validate app key matches the trading mode to prevent credential mismatch errors.
 
-    - Real mode (prod): App key should start with 'PS' but NOT 'PSVT'
-    - Demo mode (vps): App key should start with 'PSVT'
+    - Real mode (prod): Reject legacy demo keys (PSVT*)
+    - Demo mode (vps): Accept paper_app keys (legacy PSVT* or newer PS* issued by the
+      모의투자 portal), so the prefix alone cannot prove a real key here
 
     Args:
         app_key: The KIS app key
@@ -746,20 +747,13 @@ def validate_credentials(app_key: str, mode: str) -> Tuple[bool, str]:
     if not app_key or len(app_key) < 10:
         return False, "App key is empty or too short"
 
-    is_demo_key = app_key.startswith('PSVT')
+    is_legacy_demo_key = app_key.startswith('PSVT')
 
-    if mode == 'prod' and is_demo_key:
+    if mode == 'prod' and is_legacy_demo_key:
         return False, (
             "CREDENTIAL MISMATCH! Using DEMO app key (PSVT*) in REAL mode.\n"
-            "Check kis_devlp.yaml - 'my_app' should be your real trading key (PS*, not PSVT*).\n"
+            "Check kis_devlp.yaml - 'my_app' should be your real trading key, not paper_app.\n"
             "This is the most common cause of 'Error Code: 500' authentication failures."
-        )
-
-    if mode == 'vps' and not is_demo_key and app_key.startswith('PS'):
-        return False, (
-            "CREDENTIAL MISMATCH! Using REAL app key (PS*) in DEMO mode.\n"
-            "Check kis_devlp.yaml - 'paper_app' should be your demo key (PSVT*).\n"
-            "Using real credentials in demo mode may cause unexpected behavior."
         )
 
     return True, ""
