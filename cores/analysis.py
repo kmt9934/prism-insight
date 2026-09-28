@@ -97,7 +97,9 @@ async def analyze_stock(company_code: str = "000660", company_name: str = "SK하
             ref_date_obj = datetime.strptime(reference_date, "%Y%m%d")
             max_years_calc = 1
             max_years_ago_calc = (ref_date_obj - timedelta(days=365*max_years_calc)).strftime("%Y%m%d")
-            prefetched = prefetch_kr_analysis_data(company_code, reference_date, max_years_ago_calc)
+            prefetched = prefetch_kr_analysis_data(
+                company_code, reference_date, max_years_ago_calc, company_name=company_name
+            )
         except Exception as e:
             logger.warning(f"Data prefetch failed, falling back to MCP: {e}")
             prefetched = {}

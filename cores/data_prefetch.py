@@ -688,10 +688,10 @@ def _compute_kr_regime(kospi_ohlcv: dict, kosdaq_ohlcv: dict = None) -> dict:
     #   shadow = 강등 '판단'만 계산·로깅하고 regime 은 그대로(긴급 관찰용).
     #   active = 실제 강등 적용.  off = 완전 비활성.
     # active 전환은 급락형 고변동 오판을 신규매수 레짐에 반영한다.
-    import os as _os
+    from prism_core.env_config import env_choice
     # The validated acute-drawdown override is now active by default.  The env
     # flag remains available for an explicit emergency rollback to shadow/off.
-    _mode = _os.environ.get("REGIME_HIVOL_OVERRIDE", "active").strip().lower()
+    _mode = env_choice("REGIME_HIVOL_OVERRIDE", "active", ("active", "shadow", "off"))
     index_summary["highvol_override_mode"] = _mode
     index_summary["highvol_drawdown_override"] = None
     if _mode != "off":
@@ -714,7 +714,8 @@ def _compute_kr_regime(kospi_ohlcv: dict, kosdaq_ohlcv: dict = None) -> dict:
     }
 
 
-def prefetch_kr_analysis_data(company_code: str, reference_date: str, max_years_ago: str, *, asof_utc=None) -> dict:
+def prefetch_kr_analysis_data(company_code: str, reference_date: str, max_years_ago: str,
+                              company_name: str = "", *, asof_utc=None) -> dict:
     """Prefetch all data needed for KR stock analysis agents.
 
     Calls kospi_kosdaq MCP server's library functions directly (not via MCP protocol).
@@ -770,6 +771,18 @@ def prefetch_kr_analysis_data(company_code: str, reference_date: str, max_years_
         result["flow_evidence"] = render_kr_flow_evidence(evidence)
         if trading_volume:
             result["trading_volume"] += result["flow_evidence"]
+
+    # 5. Open DART structured fundamentals (optional; empty without DART_API_KEY)
+    try:
+        from cores.dart_fundamentals import prefetch_dart_fundamentals_markdown
+
+        dart_md = prefetch_dart_fundamentals_markdown(
+            company_name or company_code, company_code, reference_date
+        )
+        if dart_md:
+            result["dart_fundamentals"] = dart_md
+    except Exception as e:
+        logger.warning(f"DART prefetch failed for {company_code}: {e}")
 
     if result:
         logger.info(f"Prefetched KR data for {company_code}: {list(result.keys())}")

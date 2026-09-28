@@ -708,17 +708,21 @@ class StockAnalysisOrchestrator:
                 msg_type="analysis"
             )
 
-            # Send PDF files to main channel
-            for pdf_path in pdf_paths:
-                logger.info(f"Sending PDF file: {pdf_path}")
-                success = await bot_agent.send_document(chat_id, str(pdf_path), msg_type="pdf")
-                if success:
-                    logger.info(f"PDF file transmission successful: {pdf_path}")
-                else:
-                    logger.error(f"PDF file transmission failed: {pdf_path}")
+            # Send PDF files to main channel (optional)
+            from prism_core.env_config import env_bool
+            if not env_bool("TELEGRAM_SEND_PDF", True):
+                logger.info("TELEGRAM_SEND_PDF disabled - skipping PDF file transmission")
+            else:
+                for pdf_path in pdf_paths:
+                    logger.info(f"Sending PDF file: {pdf_path}")
+                    success = await bot_agent.send_document(chat_id, str(pdf_path), msg_type="pdf")
+                    if success:
+                        logger.info(f"PDF file transmission successful: {pdf_path}")
+                    else:
+                        logger.error(f"PDF file transmission failed: {pdf_path}")
 
-                # Transmission interval
-                await asyncio.sleep(1)
+                    # Transmission interval
+                    await asyncio.sleep(1)
 
             # Phase 6 S6: broadcast annotated insight images (default-OFF, non-blocking).
             # One image per company AFTER its PDF. KR -> market=None (auto

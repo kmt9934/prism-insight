@@ -1,0 +1,5 @@
+# Files executed or parsed on the Linux server must keep LF even when cloned on
+# Windows with core.autocrlf=true (CRLF breaks cron entries and bash scripts).
+*.py text eol=lf
+*.sh text eol=lf
+docker/crontab text eol=lf

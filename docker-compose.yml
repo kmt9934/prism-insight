@@ -11,6 +11,8 @@ services:
       - TZ=Asia/Seoul
       - PYTHONUNBUFFERED=1
       - ENABLE_CRON=true  # Set to 'false' to disable cron jobs
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
 
     # 볼륨 마운트
     volumes:
@@ -25,6 +27,7 @@ services:
       # 설정 파일 (호스트에서 수정 가능)
       - ./.env:/app/prism-insight/.env
       - ./mcp_agent.config.yaml:/app/prism-insight/mcp_agent.config.yaml
+      - ./trading/config/kis_devlp.yaml:/app/prism-insight/trading/config/kis_devlp.yaml:ro
       - ./mcp_agent.secrets.yaml:/app/prism-insight/mcp_agent.secrets.yaml
 
       # 로그 파일
@@ -55,6 +58,33 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  prism-telegram-bot:
+    image: prism-insight:latest
+    container_name: prism-telegram-bot
+    depends_on:
+      - prism-insight
+    environment:
+      - TZ=Asia/Seoul
+      - PYTHONUNBUFFERED=1
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - prism-data:/app/prism-insight/data
+      - ./reports:/app/prism-insight/reports
+      - ./pdf_reports:/app/prism-insight/pdf_reports
+      - ./html_reports:/app/prism-insight/html_reports
+      - ./charts:/app/prism-insight/charts
+      - ./telegram_messages:/app/prism-insight/telegram_messages
+      - ./.env:/app/prism-insight/.env
+      - ./mcp_agent.config.yaml:/app/prism-insight/mcp_agent.config.yaml
+      - ./mcp_agent.secrets.yaml:/app/prism-insight/mcp_agent.secrets.yaml
+      - ./logs:/app/prism-insight/logs
+      - ./stock_tracking_db.sqlite:/app/prism-insight/stock_tracking_db.sqlite
+    working_dir: /app/prism-insight
+    command: ["/app/venv/bin/python", "telegram_ai_bot.py"]
+    restart: unless-stopped
+    network_mode: bridge
 
 # 볼륨 정의
 volumes:
