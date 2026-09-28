@@ -440,6 +440,16 @@ async def _async_main(args: argparse.Namespace) -> int:
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
+    try:
+        import sys
+
+        if str(PROJECT_ROOT) not in sys.path:
+            sys.path.insert(0, str(PROJECT_ROOT))
+        from prism_core.log_redaction import install_log_redaction
+
+        install_log_redaction()
+    except Exception:
+        pass
     from dotenv import load_dotenv
 
     load_dotenv(dotenv_path=str(PROJECT_ROOT / ".env"), override=False)

@@ -13,6 +13,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+from prism_core.log_redaction import install_log_redaction
+install_log_redaction()
 logger = logging.getLogger(__name__)
 
 class TelegramBotAgent:

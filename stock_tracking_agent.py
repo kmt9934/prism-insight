@@ -41,6 +41,8 @@ logging.basicConfig(
         logging.FileHandler(f"stock_tracking_{datetime.now().strftime('%Y%m%d')}.log")
     ]
 )
+from prism_core.log_redaction import install_log_redaction
+install_log_redaction()
 logger = logging.getLogger(__name__)
 
 # MCP related imports

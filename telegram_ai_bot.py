@@ -73,6 +73,8 @@ logging.basicConfig(
         )
     ]
 )
+from prism_core.log_redaction import install_log_redaction
+install_log_redaction()
 logger = logging.getLogger(__name__)
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler

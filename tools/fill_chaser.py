@@ -840,6 +840,12 @@ def _setup_logging() -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=handlers,
     )
+    try:
+        from prism_core.log_redaction import install_log_redaction
+
+        install_log_redaction()
+    except Exception:
+        pass
     if _DEPRECATED_ENV:
         logger.warning(
             "deprecated env keys in use (rename to FILL_CHASER_*): %s",
