@@ -2751,7 +2751,11 @@ Use yahoo_finance and sqlite tools to check latest data, then decide whether to 
         except EffectsFailure:
             raise
         except Exception as exc:  # noqa: BLE001 - new buys fail closed on gate errors
-            logger.error("[BUY_GATE][US] deterministic gate failed closed: %s", exc)
+            logger.error(
+                "[BUY_GATE][US] deterministic gate failed closed (buy blocked): %s: %s",
+                type(exc).__name__, exc,
+                exc_info=True,
+            )
             finding = {
                 "code": "buy_gate_error",
                 "message": f"deterministic buy gate unavailable: {type(exc).__name__}",

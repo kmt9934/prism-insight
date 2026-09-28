@@ -163,12 +163,9 @@ _DEFAULT_KR_EXIT_LIMIT = object()
 
 
 def _env_flag_enabled(name: str) -> bool:
-    return os.environ.get(name, "0").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    from prism_core.env_config import env_bool
+
+    return env_bool(name, False)
 
 
 def _kr_codex_runtime_enabled() -> bool:
@@ -176,6 +173,29 @@ def _kr_codex_runtime_enabled() -> bool:
     return _env_flag_enabled("PRISM_KR_CODEX_FAST_TRADING") or _env_flag_enabled(
         "PRISM_KR_CODEX_FAST_SELL"
     )
+
+
+def _render_korean_messages_or_plain(messages: List[str]) -> List[str]:
+    """Korean display labels are cosmetic; a renderer failure sends the raw text."""
+    try:
+        from messaging.korean_trading_message import render_korean_trading_message
+    except Exception as exc:  # noqa: BLE001 - version skew must not drop the summary
+        logger.warning(
+            "Korean trading message renderer unavailable (%s: %s); sending plain text",
+            type(exc).__name__, exc,
+        )
+        return list(messages)
+    rendered = []
+    for message in messages:
+        try:
+            rendered.append(render_korean_trading_message(message))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Korean trading message render failed (%s: %s); sending plain text",
+                type(exc).__name__, exc,
+            )
+            rendered.append(message)
+    return rendered
 
 
 @dataclass(frozen=True)
@@ -3015,7 +3035,11 @@ class StockTrackingAgent:
         except EffectsFailure:
             raise
         except Exception as exc:  # noqa: BLE001 - new buys fail closed on gate errors
-            logger.error("[BUY_GATE][KR] deterministic gate failed closed: %s", exc)
+            logger.error(
+                "[BUY_GATE][KR] deterministic gate failed closed (buy blocked): %s: %s",
+                type(exc).__name__, exc,
+                exc_info=True,
+            )
             return {
                 "allowed": False,
                 "would_block": True,
@@ -4874,7 +4898,14 @@ class StockTrackingAgent:
 
     async def _send_with_retry(self, chat_id: str, text: str, max_retries: int = 3):
         """Retry explicit rate rejection only; ambiguous delivery requires review."""
-        from messaging.telegram_delivery import send_message_once_or_rate_retry
+        try:
+            from messaging.telegram_delivery import send_message_once_or_rate_retry
+        except Exception as exc:  # noqa: BLE001 - version skew must not drop the summary
+            logger.warning(
+                "messaging.telegram_delivery unavailable (%s: %s); sending once without rate retry",
+                type(exc).__name__, exc,
+            )
+            return await self.telegram_bot.send_message(chat_id=chat_id, text=text)
 
         return await send_message_once_or_rate_retry(
             self.telegram_bot, chat_id=chat_id, text=text, attempts=max_retries + 1
@@ -4909,9 +4940,8 @@ class StockTrackingAgent:
             else:
                 logger.info("[portfolio-dedup] KR portfolio summary skipped (sent within debounce window)")
 
-            from messaging.korean_trading_message import render_korean_trading_message
             if language == "ko":
-                self.message_queue = [render_korean_trading_message(message) for message in self.message_queue]
+                self.message_queue = _render_korean_messages_or_plain(self.message_queue)
             self.last_batch_messages = [
                 (
                     self._msg_types[index]
