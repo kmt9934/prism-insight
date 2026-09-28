@@ -174,30 +174,6 @@ def _kr_codex_runtime_enabled() -> bool:
         "PRISM_KR_CODEX_FAST_SELL"
     )
 
-
-def _render_korean_messages_or_plain(messages: List[str]) -> List[str]:
-    """Korean display labels are cosmetic; a renderer failure sends the raw text."""
-    try:
-        from messaging.korean_trading_message import render_korean_trading_message
-    except Exception as exc:  # noqa: BLE001 - version skew must not drop the summary
-        logger.warning(
-            "Korean trading message renderer unavailable (%s: %s); sending plain text",
-            type(exc).__name__, exc,
-        )
-        return list(messages)
-    rendered = []
-    for message in messages:
-        try:
-            rendered.append(render_korean_trading_message(message))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Korean trading message render failed (%s: %s); sending plain text",
-                type(exc).__name__, exc,
-            )
-            rendered.append(message)
-    return rendered
-
-
 @dataclass(frozen=True)
 class _PreparedKrEntry:
     legacy_holding_id: int
@@ -4941,7 +4917,25 @@ class StockTrackingAgent:
                 logger.info("[portfolio-dedup] KR portfolio summary skipped (sent within debounce window)")
 
             if language == "ko":
-                self.message_queue = _render_korean_messages_or_plain(self.message_queue)
+                # Korean labels are cosmetic; a renderer failure sends the raw text.
+                try:
+                    from messaging.korean_trading_message import render_korean_trading_message
+                    rendered = []
+                    for message in self.message_queue:
+                        try:
+                            rendered.append(render_korean_trading_message(message))
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(
+                                "Korean trading message render failed (%s: %s); sending plain text",
+                                type(exc).__name__, exc,
+                            )
+                            rendered.append(message)
+                    self.message_queue = rendered
+                except Exception as exc:  # noqa: BLE001 - version skew must not drop the summary
+                    logger.warning(
+                        "Korean trading message renderer unavailable (%s: %s); sending plain text",
+                        type(exc).__name__, exc,
+                    )
             self.last_batch_messages = [
                 (
                     self._msg_types[index]

@@ -102,7 +102,24 @@ except Exception:
 # warns once for any legacy key in use.
 _DEPRECATED_ENV: List[str] = []
 
-from prism_core.env_config import parse_bool, parse_float, parse_int  # noqa: E402
+
+def _load_env_config():
+    """Load the dependency-free reader by path; direct runs may lack the repo on sys.path."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "prism_fill_chaser_env_config", PROJECT_ROOT / "prism_core" / "env_config.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_env_config = _load_env_config()
+parse_bool, parse_float, parse_int = (
+    _env_config.parse_bool, _env_config.parse_float, _env_config.parse_int,
+)
 
 
 def _env(suffix: str, default: Optional[str] = None) -> Optional[str]:
