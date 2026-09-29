@@ -304,6 +304,15 @@ def _master_volume_match_kind(master_volume, daily_volume) -> str | None:
     return "float32_master_observed" if master == rounded else None
 
 
+_RATE_LIMIT_MAX_CONSECUTIVE = 30
+_RATE_LIMIT_BACKOFF_MAX_SEC = 8.0
+
+
+def _is_rate_limited(error: Exception) -> bool:
+    text = str(error)
+    return "EGW00201" in text or "초당 거래건수" in text
+
+
 def fetch_kis_previous_history(
     tickers: Iterable[str], previous_date: str, *, source=None, cache_dir=None,
     request_interval_sec: float = 0.12, max_duration_sec: float = 900,
@@ -330,6 +339,7 @@ def fetch_kis_previous_history(
     rows = {}
     missing = []
     failures = 0
+    rate_limited = 0
     pending = deque(codes)
     retried = set()
     error_types = {}
@@ -372,9 +382,23 @@ def fetch_kis_previous_history(
                 temporary.unlink(missing_ok=True)
             rows[code] = row
             failures = 0
+            rate_limited = 0
         except KisSnapshotError:
             raise
         except Exception as error:
+            if _is_rate_limited(error):
+                # Other loops share this app key; a per-second rejection says
+                # "slow down", not "this ticker is bad", so it must not trip
+                # the consecutive-failure breaker.
+                error_types["RateLimited"] = error_types.get("RateLimited", 0) + 1
+                rate_limited += 1
+                if rate_limited >= _RATE_LIMIT_MAX_CONSECUTIVE:
+                    raise KisSnapshotError(
+                        f"KIS history rate limited; coverage={len(rows)}/{len(codes)}; error_types={error_types}"
+                    ) from None
+                time.sleep(min(_RATE_LIMIT_BACKOFF_MAX_SEC, 2 ** (rate_limited - 1)))
+                pending.appendleft(code)
+                continue
             error_name = type(error).__name__
             error_types[error_name] = error_types.get(error_name, 0) + 1
             failures += 1
