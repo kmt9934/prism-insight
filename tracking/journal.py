@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from cores.openai_error_logging import log_openai_error
 from cores.utils import parse_llm_json
 from observability.events import emit_event
+from report_model_config import REPORT_AUX_EFFORT, REPORT_AUX_MODEL
 
 _feedback_spec = importlib.util.spec_from_file_location(
     "prism_root_performance_feedback",
@@ -146,8 +147,8 @@ class JournalManager:
                 registry = load_mcp_registry()
                 spec = spec_from_mcp_agent(
                     journal_agent,
-                    model="gpt-5.4-mini",
-                    params=LLMParams(max_tokens=16000, reasoning_effort="none"),
+                    model=REPORT_AUX_MODEL,
+                    params=LLMParams(max_tokens=16000, reasoning_effort=REPORT_AUX_EFFORT),
                 )
                 result = await get_llm_backend(registry).run(spec, prompt)
                 response = result.text
@@ -156,7 +157,11 @@ class JournalManager:
                     llm = await journal_agent.attach_llm(OpenAIAugmentedLLM)
                     response = await llm.generate_str(
                         message=prompt,
-                        request_params=RequestParams(model="gpt-5.4-mini", reasoning_effort="none", maxTokens=16000)
+                        request_params=RequestParams(
+                            model=REPORT_AUX_MODEL,
+                            reasoning_effort=REPORT_AUX_EFFORT,
+                            maxTokens=16000,
+                        )
                     )
             logger.info(f"Journal agent response received: {len(response)} chars")
 

@@ -53,8 +53,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> /root/.bashrc
 
-# PATH에 UV 추가
-ENV PATH="/root/.cargo/bin:$PATH"
+# PATH에 UV 추가 (현재 설치 스크립트는 ~/.local/bin, 구버전은 ~/.cargo/bin)
+ENV PATH="/root/.local/bin:/root/.cargo/bin:$PATH"
 
 # Python 가상환경 생성
 RUN python3 -m venv /app/venv

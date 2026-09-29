@@ -387,7 +387,9 @@ def _fetch_ma50(market: str, ticker: str) -> float:
         else:  # KR via repository KIS market data
             from cores import market_data as stock
             end = _now().date()
-            start = end - timedelta(days=80)  # ~80 calendar days -> >=50 trading closes
+            # 120 calendar days (~80 sessions) keeps >=50 closes across holiday
+            # clusters while staying under the 100-row KIS daily-chart page.
+            start = end - timedelta(days=120)
             df = stock.get_market_ohlcv_by_date(
                 start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), ticker
             )
@@ -396,6 +398,10 @@ def _fetch_ma50(market: str, ticker: str) -> float:
                 if col is not None:
                     closes = [float(x) for x in df[col].dropna().tolist()]
         if len(closes) < 50:
+            logger.warning(
+                "[%s] %s ma_50 unavailable: only %d closes (need 50); TIER1.5 dormant",
+                market, ticker, len(closes),
+            )
             return 0.0
         last50 = closes[-50:]
         return sum(last50) / 50.0
