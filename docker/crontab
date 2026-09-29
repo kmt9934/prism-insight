@@ -5,7 +5,7 @@
 
 # Environment variables
 SHELL=/bin/bash
-PATH=/app/venv/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/app/venv/bin:/root/.local/bin:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PYTHONPATH=/app/prism-insight
 
 # -----------------------------------------------------------------------------
