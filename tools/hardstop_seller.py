@@ -116,6 +116,10 @@ LOCK_TTL_SEC = _env_int("LOCK_TTL_SEC", 300)
 # (hardstop 하드스탑은 장중 시장가라 정상 주문은 수 초 내 체결됨. fill-chaser가 SHADOW라
 #  미정리된 레코드가 손절을 영구 차단하던 버그 방지.)
 INFLIGHT_TTL_SEC = _env_int("INFLIGHT_TTL_SEC", 900)  # 15분
+# 장부는 매도로 닫혔지만 KIS 매도가 거절돼 잔고에 남은 KR 주식을 다음 정규장에 재매도.
+# (예: 모의투자는 15:30 이후 시간외 종가·예약 주문을 모두 거절한다.) LIVE 에서만 동작.
+RESIDUAL_RETRY = _env_flag("RESIDUAL_RETRY", True)
+RESIDUAL_LOOKBACK_DAYS = _env_int("RESIDUAL_LOOKBACK_DAYS", 10)
 DB_PATH = _env("DB") or os.getenv("STOCK_TRACKING_DB") \
     or str(PROJECT_ROOT / "stock_tracking_db.sqlite")
 # Reuse the same channel the batch/system already broadcasts to (TELEGRAM_CHANNEL_ID).
@@ -299,12 +303,15 @@ async def run_market(market: str, run_id: str) -> Dict[str, Any]:
     Never raises: any failure degrades to a no-op for that ticker/market.
     """
     summary = {"market": market, "checked": 0, "triggered": 0, "sold": 0,
-               "shadow": 0, "skipped": 0, "pyramided_skipped": 0}
+               "shadow": 0, "skipped": 0, "pyramided_skipped": 0,
+               "residual_retried": 0, "residual_sold": 0}
     from cores.oneil_fallback import SellInputs, evaluate_tier1_hardstop
     conn = _connect()
     agent = {"ref": None}  # lazily created on first LIVE sell
     try:
         _ensure_schema(conn)
+        if market == "KR" and HARDSTOP_LIVE and RESIDUAL_RETRY and _kr_regular_session():
+            await _retry_residual_sells(conn, run_id, summary)
         by_ticker = load_holdings_by_ticker(conn, market)
         if not by_ticker:
             return summary
@@ -762,6 +769,82 @@ async def _act_on_trigger(conn, market: str, ticker: str, stock_data: Dict[str, 
     except Exception as e:
         logger.error("[%s] %s sell action failed: %s", market, ticker, e)
         release_lock(conn, ticker, market, run_id, new_state="HOLDING")
+
+
+def _kr_regular_session() -> bool:
+    from prism_core.time_windows import domestic_order_window
+
+    return domestic_order_window() == "regular"
+
+
+async def _retry_residual_sells(conn, run_id: str, summary: Dict[str, Any]) -> None:
+    """Re-place KR SELLs the broker rejected after the ledger already closed.
+
+    Market orders in the regular session only. Never raises. The retry intent's
+    idempotency key allows one attempt per failed intent per KST day.
+    """
+    from prism_core.execution_service import OrderOutcomeUnknown
+    from prism_core.order_intents import OrderIntent
+    from prism_core.residual_sells import (
+        find_residual_sell_candidates,
+        resolve_retry_quantity,
+        retry_decision_id,
+    )
+    from prism_core.time_windows import now_kst
+
+    try:
+        candidates = find_residual_sell_candidates(
+            conn, now_utc=_now(), lookback_days=RESIDUAL_LOOKBACK_DAYS
+        )
+    except Exception as e:
+        logger.warning("[KR] residual sell scan failed: %s", e)
+        return
+    kst_date = now_kst().date().isoformat()
+    for cand in candidates:
+        ticker = cand["symbol"]
+        if has_open_inflight(conn, ticker, "KR") or not claim_lock(conn, ticker, "KR", run_id):
+            logger.info("[KR] %s residual retry skipped (inflight/lock)", ticker)
+            continue
+        try:
+            async with _open_context("KR", account_name=cand["account_name"]) as seller:
+                live_qty = await asyncio.to_thread(seller.get_holding_quantity, ticker)
+                qty = resolve_retry_quantity(cand["quantity"], live_qty)
+                if qty <= 0:
+                    logger.info("[KR] %s residual retry: broker already flat", ticker)
+                    continue
+                summary["residual_retried"] += 1
+                intent = OrderIntent.create(
+                    market="KR",
+                    account_id=cand["account_key"],
+                    symbol=ticker,
+                    side="sell",
+                    order_style="market",
+                    source="hardstop_residual",
+                    source_decision_id=retry_decision_id(cand["failed_intent_id"], kst_date),
+                    quantity=qty,
+                    reason=f"residual retry of failed sell intent {cand['failed_intent_id']}",
+                )
+                result = await seller.execute_sell(ticker, quantity=qty, intent=intent)
+                ok = bool(result and result.get("success"))
+                order_no = (result or {}).get("order_no")
+                status = (result or {}).get("intent_status")
+                logger.warning(
+                    "[LIVE][KR] %s residual retry qty=%s success=%s status=%s order_no=%s msg=%s",
+                    ticker, qty, ok, status, order_no, (result or {}).get("message"),
+                )
+                record_inflight(
+                    conn, ticker, "KR", run_id, qty,
+                    "FILLED" if ok else ("UNKNOWN" if status == "UNKNOWN" else "REJECTED"),
+                    "RESIDUAL_RETRY", str(order_no) if order_no else None,
+                )
+                if ok:
+                    summary["residual_sold"] += 1
+        except OrderOutcomeUnknown as e:
+            logger.critical("[KR] %s residual retry outcome UNKNOWN: intent=%s", ticker, e.intent_id)
+        except Exception as e:
+            logger.error("[KR] %s residual retry failed: %s", ticker, e)
+        finally:
+            release_lock(conn, ticker, "KR", run_id)
 
 
 async def main_async(markets: List[str]) -> int:
