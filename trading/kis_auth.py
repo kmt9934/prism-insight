@@ -1350,6 +1350,24 @@ class APIRespError(APIResp):
 ########### API call wrapping : Common API call
 
 
+_GET_RETRY_DELAYS_SEC = (2, 5)
+
+
+def _get_with_retry(url, headers, params):
+    """GET only: POST is never retried because it can place a second order."""
+    for delay in (*_GET_RETRY_DELAYS_SEC, None):
+        try:
+            return requests.get(url, headers=headers, params=params, timeout=30)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+            if delay is None:
+                raise
+            logging.getLogger(__name__).warning(
+                "KIS GET %s failed (%s); retrying in %ss",
+                url.rsplit("/", 1)[-1], type(exc).__name__, delay,
+            )
+            time.sleep(delay)
+
+
 def _url_fetch(
         api_url, ptr_id, tr_cont, params, appendHeaders=None, postFlag=False, hashFlag=True
 ):
@@ -1382,7 +1400,7 @@ def _url_fetch(
         # if (hashFlag): set_order_hash_key(headers, params)
         res = requests.post(url, headers=headers, data=json.dumps(params), timeout=30)
     else:
-        res = requests.get(url, headers=headers, params=params, timeout=30)
+        res = _get_with_retry(url, headers, params)
 
     if res.status_code == 200:
         ar = APIResp(res)
