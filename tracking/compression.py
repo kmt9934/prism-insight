@@ -15,6 +15,7 @@ from typing import Any, Dict, List
 
 from cores.openai_error_logging import log_openai_error
 from cores.utils import parse_llm_json
+from report_model_config import REPORT_AUX_EFFORT, REPORT_AUX_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,7 @@ class CompressionManager:
 
                 response = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-5.4", reasoning_effort="none", maxTokens=8000)
+                    request_params=RequestParams(model=REPORT_AUX_MODEL, reasoning_effort=REPORT_AUX_EFFORT, maxTokens=8000)
                 )
 
             compression_data = self._parse_response(response)
@@ -199,7 +200,7 @@ class CompressionManager:
 
                 response = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-5.4", reasoning_effort="none", maxTokens=8000)
+                    request_params=RequestParams(model=REPORT_AUX_MODEL, reasoning_effort=REPORT_AUX_EFFORT, maxTokens=8000)
                 )
 
             compression_data = self._parse_response(response)
@@ -269,7 +270,7 @@ class CompressionManager:
                 prompt = self._build_layer3_prompt(entries_text, len(entries))
                 response = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-5.4", reasoning_effort="none", maxTokens=8000)
+                    request_params=RequestParams(model=REPORT_AUX_MODEL, reasoning_effort=REPORT_AUX_EFFORT, maxTokens=8000)
                 )
             data = self._parse_response(response)
             new_intuitions = data.get('new_intuitions', [])
