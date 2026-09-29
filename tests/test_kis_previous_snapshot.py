@@ -156,6 +156,41 @@ def test_broad_outage_stops_after_five_requests_without_retry_storm(tmp_path):
     assert len(source.calls) == 5
 
 
+def test_rate_limit_backs_off_without_tripping_breaker(tmp_path, monkeypatch):
+    import cores.kis_market_snapshot as module
+    sleeps = []
+    monkeypatch.setattr(module.time, "sleep", sleeps.append)
+
+    class BurstLimitedSource(Source):
+        def price_history(self, *args, **kwargs):
+            super().price_history(*args, **kwargs)
+            if len(self.calls) <= 6:
+                raise RuntimeError("KIS FHKST03010100 rejected the request: 초당 거래건수를 초과하였습니다.")
+            return Source.price_history(self, *args, **kwargs)
+
+    source = BurstLimitedSource()
+    result = fetch_kis_previous_history(["004170", "005930"], "20260910", source=source,
+                                        cache_dir=tmp_path, request_interval_sec=0)
+    assert sorted(result.index) == ["004170", "005930"]
+    assert [s for s in sleeps if s] == [1, 2, 4, 8, 8, 8]
+
+
+def test_sustained_rate_limit_gives_up(tmp_path, monkeypatch):
+    import cores.kis_market_snapshot as module
+    monkeypatch.setattr(module.time, "sleep", lambda _s: None)
+
+    class LimitedSource(Source):
+        def price_history(self, *args, **kwargs):
+            super().price_history(*args, **kwargs)
+            raise RuntimeError("Error Code : 500 | EGW00201")
+
+    source = LimitedSource()
+    with pytest.raises(KisSnapshotError, match="rate limited"):
+        fetch_kis_previous_history(["004170"], "20260910", source=source,
+                                   cache_dir=tmp_path, request_interval_sec=0)
+    assert len(source.calls) == module._RATE_LIMIT_MAX_CONSECUTIVE
+
+
 def test_expired_budget_does_not_start_retry(tmp_path, monkeypatch):
     import cores.kis_market_snapshot as module
     now = [0.0]
