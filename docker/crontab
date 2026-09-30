@@ -30,6 +30,8 @@ PYTHONPATH=/app/prism-insight
 
 # Stock data update at 07:00 KST (Mon-Fri)
 0 7 * * 1-5 cd /app/prism-insight && python3 update_stock_data.py >> /app/prism-insight/logs/stock_update_$(date +\%Y\%m\%d).log 2>&1
+# Warm the KIS previous-session bar cache while no intraday loop shares the mock quota
+40 7 * * 1-5 cd /app/prism-insight && python3 tools/prefetch_kr_previous_history.py >> /app/prism-insight/logs/kr_prefetch_$(date +\%Y\%m\%d).log 2>&1
 
 # KR Morning batch at 09:30 KST (Mon-Fri)
 30 9 * * 1-5 cd /app/prism-insight && python3 stock_analysis_orchestrator.py --mode morning >> /app/prism-insight/logs/kr_morning_$(date +\%Y\%m\%d).log 2>&1
