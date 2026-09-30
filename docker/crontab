@@ -44,7 +44,7 @@ PYTHONPATH=/app/prism-insight
 
 
 # Luna buy-intensity recommend at 17:15 KST (Mon-Fri) — Telegram only, no .env writes
-15 17 * * 1-5 cd /app/prism-insight && python3 tools/buy_intensity_luna_recommend.py --once >> /app/prism-insight/logs/buy_intensity_luna_$(date +\%Y\%m\%d).log 2>&1
+# DISABLED 2026-09-29 (Luna judgment dropped; chief-of-staff only): 15 17 * * 1-5 cd /app/prism-insight && python3 tools/buy_intensity_luna_recommend.py --once >> /app/prism-insight/logs/buy_intensity_luna_$(date +\%Y\%m\%d).log 2>&1
 # Performance tracker at 17:00 KST (Mon-Fri)
 0 17 * * 1-5 cd /app/prism-insight && python3 performance_tracker_batch.py >> /app/prism-insight/logs/performance.log 2>&1
 
