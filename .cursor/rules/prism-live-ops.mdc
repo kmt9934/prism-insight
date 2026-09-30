@@ -1,0 +1,15 @@
+---
+description: Prism live-ops hard rules (mini2, .env, deploy, secrets, fork-only git)
+alwaysApply: true
+---
+Source of truth: `AGENTS.md` section "mini2 live operations (kmt9934 fork)". Read it before any live-ops, deploy, `.env` or git remote work.
+
+Hard stops:
+- Never reset/clean/stash or overwrite the mini2 live tree `/home/user/services/prism-insight`; it holds live-only `.env`, `docker-compose.override.yml` and runtime data.
+- Deploy only whole commits via `tools/deploy_live.sh`; never copy single files into the live tree.
+- Never start `prism-telegram-bot` or use `--with-bot` without explicit user approval.
+- Back up `.env` to `/home/user/prism_backups/` before editing; after any `.env`/`docker/crontab` change, force-recreate `prism-insight` and run `tools/check_live_config.sh`.
+- Only `REGIME_MIN_SCORE_FLOOR`, `REGIME_WEAK_NO_TOPDOWN`, `REGIME_HIVOL_OVERRIDE` may be changed as strategy switches, and only on user request; everything else goes through `docs/TRADING_CHANGE_REVIEW_HARNESS.md`.
+- Never print `.env` values or any secret/token; new entrypoints must call `install_log_redaction()`.
+- Do not re-enable the Luna cron line in `docker/crontab`.
+- Push and open PRs only on the fork kmt9934/prism-insight; never on upstream dragon1086/prism-insight.
