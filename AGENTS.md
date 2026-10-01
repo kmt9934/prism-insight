@@ -1,4 +1,4 @@
-# AGENTS.md - Codex Guide for PRISM-INSIGHT
+# AGENTS.md - Agent Guide for PRISM-INSIGHT
 
 This file governs the repository rooted here.
 
@@ -83,6 +83,78 @@ Avoid broad production-like runs unless the task requires them.
   New risk-budget defaults, strategy promotion, and unrelated app-server deployments
   are not authorized merely by this review-workflow preference.
 - See docs/BTC_TPSL_DEPLOYMENT_2026-09-06_ko.md for the authorization and initial rollout evidence.
+
+## mini2 live operations (kmt9934 fork)
+
+### Live tree and deploy
+
+- Live deploy tree: mini2 `/home/user/services/prism-insight` (ssh `user@mini2`), a detached
+  checkout of the fork (remote `fork` on mini2 = kmt9934/prism-insight). It is not upstream and
+  differs from upstream main. It also holds live-only state that exists in no remote: `.env`
+  (git-ignored), an untracked `docker-compose.override.yml`, and runtime data (reports, logs,
+  `stock_tracking_db.sqlite`, etc.). Never reset/clean/stash or overwrite it; check `git status`
+  and `git log` on mini2 before assuming it matches any remote.
+- Deploy flow (`tools/deploy_live.sh`, `tools/deploy_preflight.py`, `docs/DEPLOY_LIVE.md`): edit on
+  mini1, commit, push to the fork, then on mini2 run `tools/deploy_live.sh [REF]` (default
+  `fork/main`). The script refuses tracked modifications, fetches, checks out REF detached, builds a
+  candidate image, runs `tools/deploy_preflight.py` inside it with `--network none` (import/name
+  resolution, entrypoint imports with sockets blocked, call-site signatures, CRLF checks; no orders,
+  broker calls or Telegram), and only then retags `prism-insight:latest` and recreates
+  `prism-insight-container`. On build/preflight failure it restores the previous checkout and
+  leaves containers untouched. It ends with `tools/check_live_config.sh`.
+- Rollback = `tools/deploy_live.sh <previous commit>` (the script prints it).
+- The preflight is not pytest: run the relevant pytest on mini1 before pushing and record results
+  per `docs/SERVER_GIT_OPERATIONS_ko.md`. Never copy individual files into the live tree; deploy
+  whole commits.
+- `prism-telegram-bot` stays off: mini2's untracked `docker-compose.override.yml` puts it in profile
+  `chat-disabled` with `restart: "no"`, and the container does not exist. Do not run
+  `deploy_live.sh --with-bot` or start/recreate that service (naming it explicitly would start it)
+  without explicit user approval.
+
+### `.env`, strategy switches and secrets
+
+- Before editing `.env`, back it up to `/home/user/prism_backups/`
+  (`cp -p .env /home/user/prism_backups/.env.bak-$(date +%Y%m%d-%H%M%S)-<reason>`).
+- After ANY `.env` or `docker/crontab` change run
+  `docker compose up -d --force-recreate prism-insight`, then `tools/check_live_config.sh` (must show
+  OK; it prints file names and OK/STALE only). Reason: single-file bind mount
+  `./.env:/app/prism-insight/.env` (`docker-compose.yml`); editors that replace the file leave the
+  container on the old inode.
+- REGIME_* values are read from the mounted `.env` via `load_dotenv()` (`stock_tracking_agent.py`,
+  `stock_analysis_orchestrator.py`, `trigger_batch.py`), not from the container environment (compose
+  `environment:` has no REGIME_* and no `env_file`). Check the file, not `docker exec ... env`.
+  KR parsing is lenient via `prism_core/env_config.py`.
+- Strategy switches (owner rule): the only `.env` values an agent may change as strategy switches
+  are `REGIME_MIN_SCORE_FLOOR`, `REGIME_WEAK_NO_TOPDOWN` and `REGIME_HIVOL_OVERRIDE`, and only when
+  the user asks. Any other strategy/regime/entry/exit/sizing change goes through
+  `docs/TRADING_CHANGE_REVIEW_HARNESS.md`. `REGIME_HIVOL_OVERRIDE=active` is the stricter setting and
+  the code default (`cores/data_prefetch.py`, `prism-us/cores/data_prefetch.py`); `shadow`/`off` are
+  emergency rollback (`docs/FEATURE_FLAGS.md`).
+- Never print `.env` values when reporting; report names and on/off only if the user asks.
+- Never log, print or echo the Telegram bot token or any other secret (`.env`,
+  `mcp_agent.secrets.yaml`, `trading/config/kis_devlp.yaml`). Commit 8c370a3 added
+  `prism_core/log_redaction.py`; entrypoints call `install_log_redaction()` after logging is
+  configured (quiets httpx/httpcore/telegram loggers to WARNING and redacts bot tokens). Any new
+  entrypoint or tool must do the same; do not raise httpx logging back to INFO/DEBUG.
+- Luna cron: the `tools/buy_intensity_luna_recommend.py` line in `docker/crontab` is intentionally
+  commented out (`DISABLED 2026-09-29`). Do not re-enable it.
+
+### Git and known gaps
+
+- Commit and push only to the fork (`kmt9934` remote on mini1, `fork` on mini2); PRs target
+  kmt9934/prism-insight `main`. Never push to or open a PR against upstream
+  `dragon1086/prism-insight` (PR #753 was opened there by mistake and closed unmerged on
+  2026-09-22 KST).
+- `pykrx` is not installed in the live container or on the mini2 host and is not in
+  `requirements.txt`; KR market data comes through the `kospi_kosdaq` MCP server launched with
+  `uvx` (see `mcp_agent.config.yaml.example`). Do not write code or scripts that assume
+  `import pykrx` works.
+- `uv`/`uvx` exist only inside the container at `/root/.local/bin`, not on the mini2 host.
+  `docker/crontab` PATH includes `/root/.local/bin` (commit d16f814); keep it.
+- The container runs as root and writes into bind-mounted folders, so parts of the live tree are
+  root-owned (e.g. `prism-us/reports`, `prism-us/pdf_reports`, many files under `reports/`, some
+  `__pycache__`). Do not chown/rm them as a side task; expect checkouts/cleanups touching them to
+  fail, and report instead.
 
 ## Engineering Rules
 
