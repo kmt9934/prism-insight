@@ -1358,7 +1358,8 @@ def _get_with_retry(url, headers, params):
     for delay in (*_GET_RETRY_DELAYS_SEC, None):
         try:
             return requests.get(url, headers=headers, params=params, timeout=30)
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError,
+                requests.exceptions.ChunkedEncodingError) as exc:
             if delay is None:
                 raise
             logging.getLogger(__name__).warning(
