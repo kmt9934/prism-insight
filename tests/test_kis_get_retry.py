@@ -51,6 +51,20 @@ def test_get_retries_read_timeout_then_succeeds(monkeypatch):
     assert len(calls) == 2
 
 
+def test_get_retries_truncated_body_then_succeeds(monkeypatch):
+    calls = []
+
+    def fake_get(*_a, **_k):
+        calls.append(1)
+        if len(calls) == 1:
+            raise requests.exceptions.ChunkedEncodingError("Connection broken: IncompleteRead")
+        return _Resp()
+
+    monkeypatch.setattr(kis_auth.requests, "get", fake_get)
+    assert kis_auth._get_with_retry("https://x/quotations/intstock-multprice", {}, {}).status_code == 200
+    assert len(calls) == 2
+
+
 def test_get_gives_up_after_three_attempts(monkeypatch):
     calls = []
 
