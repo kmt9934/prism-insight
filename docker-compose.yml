@@ -33,6 +33,9 @@ services:
       # 로그 파일
       - ./logs:/app/prism-insight/logs
 
+      # 런타임 캐시·상태 (07:40 전일시세 캐시 등). 컨테이너 재생성 시에도 유지되어야 함
+      - ./runtime:/app/prism-insight/runtime
+
       # SQLite DB (파일 단위 마운트)
       - ./stock_tracking_db.sqlite:/app/prism-insight/stock_tracking_db.sqlite
 
