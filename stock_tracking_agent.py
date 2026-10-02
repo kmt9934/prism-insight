@@ -65,7 +65,7 @@ from prism_core.isolated_strategy_effects import effects_for, EffectsFailure, ob
 from cores.openai_error_logging import log_openai_error
 from cores.agents.trading_agents import create_trading_scenario_agent
 from cores.utils import parse_llm_json
-from report_model_config import REPORT_AUX_EFFORT, REPORT_AUX_MODEL
+from report_model_config import REPORT_AUX_EFFORT, REPORT_AUX_MODEL, REPORT_MODEL
 from prism_core.execution_service import (
     ExecutionService,
     OrderOutcomeUnknown,
@@ -245,7 +245,7 @@ async def _generate_trading_scenario_json(
     bounded_attempts = max(1, attempts)
     for attempt in range(1, bounded_attempts + 1):
         final_auxiliary_attempt = attempt == bounded_attempts and bounded_attempts >= 3
-        model = REPORT_AUX_MODEL if final_auxiliary_attempt else "gpt-5.6-sol"
+        model = REPORT_AUX_MODEL if final_auxiliary_attempt else REPORT_MODEL
         effort = REPORT_AUX_EFFORT if final_auxiliary_attempt else "high"
         try:
             last_response = await llm.generate_str(

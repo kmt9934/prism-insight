@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from report_model_config import REPORT_AUX_EFFORT, REPORT_AUX_MODEL
+from report_model_config import REPORT_AUX_EFFORT, REPORT_AUX_MODEL, REPORT_MODEL
 from stock_tracking_agent import _generate_trading_scenario_json
 from tracking.helpers import default_scenario
 
@@ -64,8 +64,8 @@ async def test_final_attempt_uses_bounded_auxiliary_model_fallback():
 
     assert result["sector"] == "기계"
     assert [params.model for params in llm.request_params[:2]] == [
-        "gpt-5.6-sol",
-        "gpt-5.6-sol",
+        REPORT_MODEL,
+        REPORT_MODEL,
     ]
     assert all(
         params.reasoning_effort == "high" for params in llm.request_params[:2]
