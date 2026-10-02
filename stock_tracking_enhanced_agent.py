@@ -29,6 +29,7 @@ from cores.llm.openai_responses_llm import OpenAIResponsesLLM as OpenAIAugmented
 # Import core agents
 from cores.agents.trading_agents import create_sell_decision_agent
 from cores.utils import parse_llm_json
+from report_model_config import REPORT_MODEL
 from prism_core.execution_service import ExecutionService, OrderOutcomeUnknown
 from prism_core.order_intents import OrderIntent
 from observability.trading_context import emit_trading_context
@@ -1620,7 +1621,7 @@ class EnhancedStockTrackingAgent(StockTrackingAgent):
                     return await llm.generate_str(
                         message=prompt_message,
                         request_params=RequestParams(
-                            model="gpt-5.6-sol",
+                            model=REPORT_MODEL,
                             reasoning_effort="high",
                             maxTokens=30000
                         )
