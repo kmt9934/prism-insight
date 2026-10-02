@@ -304,6 +304,31 @@ def _master_volume_match_kind(master_volume, daily_volume) -> str | None:
     return "float32_master_observed" if master == rounded else None
 
 
+_PRICE_ADJUSTED_EXCLUSION_LIMIT = 10
+
+
+def _price_adjusted_volume_matches(master_volume, daily_volume, base_price, close) -> bool:
+    """Master volume restated by the official base/close ratio after a corporate action.
+
+    Observed 2026-10-02 (207940, action flags 01/00/01): master volume 55,248 =
+    raw 55,677 x base 1,418,000 / close 1,429,000. A mismatch explained this
+    exactly is a restatement, not an undated or wrong-session bar. Only proves
+    the bar's date; the raw OHLCV is not adjusted here, so callers must exclude
+    the issue rather than use its previous-session comparison.
+    """
+    try:
+        master, daily = float(master_volume), float(daily_volume)
+        base, prior_close = float(str(base_price).strip()), float(close)
+    except (TypeError, ValueError):
+        return False
+    if not all(math.isfinite(v) and v > 0 for v in (master, daily, base, prior_close)):
+        return False
+    if base == prior_close or master == daily:
+        return False
+    restated = round(daily * base / prior_close)
+    return abs(master - daily * base / prior_close) <= 1 or _master_volume_match_kind(master, restated) is not None
+
+
 _RATE_LIMIT_MAX_CONSECUTIVE = 30
 _RATE_LIMIT_BACKOFF_MAX_SEC = 8.0
 
@@ -553,8 +578,25 @@ def build_kis_snapshot_bundle(
             raise KisSnapshotError("KIS corporate-action validation deadline after response")
         previous.loc[code, list(_COLUMNS.values())] = [row[column] for column in _COLUMNS.values()]
         volume_matches[code] = "bonus_rights_official_adjusted_observed"
-    if any(kind is None for kind in volume_matches.values()):
+    unmatched = [code for code, kind in volume_matches.items() if kind is None]
+    price_adjusted = [
+        code for code in unmatched
+        if _price_adjusted_volume_matches(master.previous_volumes.get(code), previous.at[code, "Volume"],
+                                          master.base_prices.get(code), previous.at[code, "Close"])
+    ]
+    # One restated issue must not halt the whole market, but anything
+    # unexplained, too many restatements, or an emptied universe still fails.
+    if (len(price_adjusted) != len(unmatched) or len(price_adjusted) > _PRICE_ADJUSTED_EXCLUSION_LIMIT
+            or len(price_adjusted) == len(codes)):
         raise KisSnapshotError("KIS master previous-volume/session mismatch; cap date unverified")
+    if price_adjusted:
+        codes = [code for code in codes if code not in price_adjusted]
+        cap = cap.loc[codes].copy()
+        attrs = dict(previous.attrs)
+        previous = previous.loc[codes].copy()
+        previous.attrs.update(attrs)
+        for code in price_adjusted:
+            volume_matches.pop(code)
     rounded_volume_codes = sorted(code for code, kind in volume_matches.items()
                                   if kind == "float32_master_observed")
     # Do slow cold history first; current quotes must not age by several minutes.
@@ -573,6 +615,7 @@ def build_kis_snapshot_bundle(
     cap.attrs.update(master_volume_validation="exact_or_observed_binary32_rendering",
                      master_volume_binary32_compatibility=rounded_volume_codes)
     cap.attrs["master_bonus_rights_compatibility"] = action_codes
+    cap.attrs["master_price_adjusted_excluded"] = price_adjusted
     if action_codes:
         cap.attrs["master_volume_validation"] = "exact_or_observed_binary32_or_verified_bonus_rights"
     previous.attrs.update(
@@ -587,5 +630,6 @@ def build_kis_snapshot_bundle(
         requested_universe=len(master.names), eligible_coverage=len(codes),
         ipo_excluded=sum(master.listed_dates.get(code) == trade_date for code in master.names),
         nontrading_zero_cap_excluded=zero_cap,
+        price_adjusted_excluded=price_adjusted,
     )
     return MarketSnapshotBundle(snapshot, previous, cap, prev_date, "kis")

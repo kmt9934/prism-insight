@@ -117,11 +117,12 @@ def load_market_snapshot_bundle(trade_date: str) -> MarketSnapshotBundle:
         len(bundle.snapshot), bundle.prev_date, len(bundle.cap_df),
     )
     logger.info(
-        "[MARKET-DATA] requested_universe=%s eligible_coverage=%s ipo_excluded=%s nontrading_zero_cap_excluded=%s cap_precision_krw=%s master_volume_binary32_compatibility=%s",
+        "[MARKET-DATA] requested_universe=%s eligible_coverage=%s ipo_excluded=%s nontrading_zero_cap_excluded=%s price_adjusted_excluded=%s cap_precision_krw=%s master_volume_binary32_compatibility=%s",
         bundle.snapshot.attrs.get("requested_universe"),
         bundle.snapshot.attrs.get("eligible_coverage"),
         bundle.snapshot.attrs.get("ipo_excluded"),
         bundle.snapshot.attrs.get("nontrading_zero_cap_excluded"),
+        bundle.snapshot.attrs.get("price_adjusted_excluded"),
         bundle.cap_df.attrs.get("precision_krw"),
         bundle.cap_df.attrs.get("master_volume_binary32_compatibility"),
     )
