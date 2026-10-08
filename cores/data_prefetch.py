@@ -373,9 +373,15 @@ def prefetch_macro_intelligence_data(reference_date: str) -> dict:
     try:
         kospi_raw = server.get_index_ohlcv(regime_start_date, reference_date, "1001")
         kosdaq_raw = server.get_index_ohlcv(regime_start_date, reference_date, "2001")
-        if kospi_raw:
+        if _index_payload_ok(kospi_raw):
             result["computed_regime"] = _compute_kr_regime(kospi_raw, kosdaq_raw)
             _log_regime_snapshot("KR", result["computed_regime"])
+        else:
+            # Every source failed or was stale. An error payload used to fall
+            # into _compute_kr_regime and come back as "sideways"; say unknown.
+            result["computed_regime"] = _unknown_kr_regime()
+            _log_regime_snapshot("KR", result["computed_regime"])
+            _alert_index_unavailable(reference_date)
     except Exception as e:
         logger.error(f"Error computing regime: {e}")
 
@@ -528,6 +534,38 @@ def _inject_distribution_days(index_summary, df, close_col) -> None:
     dist = _count_distribution_days(df, close_col)
     index_summary["distribution_window"] = DISTRIBUTION_WINDOW
     index_summary["distribution_days"] = None if dist is None else dist["count"]
+
+
+def _index_payload_ok(raw) -> bool:
+    """True when an MCP-style index payload carries at least one dated bar."""
+    return (
+        isinstance(raw, dict)
+        and "error" not in raw
+        and any(key != "__meta__" for key in raw)
+    )
+
+
+def _unknown_kr_regime() -> dict:
+    return {
+        "market_regime": "unknown",
+        "regime_confidence": 0.0,
+        "simple_ma_regime": "unknown",
+        "regime_unavailable": True,
+        "regime_unavailable_reason": "KOSPI index unavailable or stale from every source",
+    }
+
+
+def _alert_index_unavailable(reference_date: str) -> None:
+    try:
+        from prism_core.ops_alert import send_ops_alert
+
+        send_ops_alert(
+            "kr_index_unavailable",
+            f"[PRISM 경고] {reference_date} 코스피 지수를 어느 출처에서도 최신으로 받지 못했습니다. "
+            "시장 국면을 '알 수 없음(unknown)'으로 두고 진행합니다. 데이터 출처를 확인하세요.",
+        )
+    except Exception as exc:  # noqa: BLE001 - alerting must not break the batch
+        logger.warning(f"index-unavailable alert failed: {type(exc).__name__}")
 
 
 def _compute_kr_regime(kospi_ohlcv: dict, kosdaq_ohlcv: dict = None) -> dict:

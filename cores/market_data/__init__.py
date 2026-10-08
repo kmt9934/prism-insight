@@ -115,7 +115,25 @@ def get_market_ohlcv_by_date(
 def get_index_ohlcv_by_date(
     start_date: str, end_date: str, index_ticker: str
 ) -> pd.DataFrame:
-    return _empty_on_exhaustion("index_history", str(index_ticker), start_date, end_date)
+    """Index OHLCV from the first source whose series is current.
+
+    A source whose last bar is stale (see `cores.market_data.freshness`) is
+    treated as failed and the next source is tried; if none is current the
+    caller gets an empty frame, never the stale series.
+    """
+    from cores.market_data.freshness import index_staleness
+
+    try:
+        return default_chain().fetch_validated(
+            "index_history",
+            lambda frame: index_staleness(frame, end_date),
+            str(index_ticker),
+            start_date,
+            end_date,
+        )
+    except Unavailable as exc:
+        logger.error("%s", exc)
+        return pd.DataFrame()
 
 
 def get_market_cap_by_date(

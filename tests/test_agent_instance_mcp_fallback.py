@@ -87,6 +87,7 @@ async def test_every_fallback_uses_instance_app_and_binds_agent_llm_context(path
                      "parse_llm_json": lambda text, **kwargs: json.loads(text),
                      "_generate_trading_scenario_json": kr_scenario,
                      "asyncio": asyncio, "logger": logging.getLogger("isolated-test"), "ticker_tag": "SYNTHETIC",
+                     "REPORT_MODEL": "report-model-test",
                      f"_{market}_codex_runtime_enabled": lambda: codex_runtime}
         exec(compile(harness, path, "exec"), namespace)
         result = await namespace["dispatch"]()

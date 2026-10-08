@@ -813,6 +813,11 @@ async def main_async(markets: List[str]) -> int:
     if not FILL_CHASER_ENABLED:
         logger.info("FILL_CHASER_ENABLED=false -> loop disabled, exiting.")
         return 0
+    from prism_core.market_calendar import drop_closed_kr
+
+    markets = drop_closed_kr(list(markets), logger, "Fill-chaser")
+    if not markets:
+        return 0
     run_id = uuid.uuid4().hex[:12]
     mode = "LIVE" if FILL_CHASER_LIVE else "SHADOW"
     logger.info("Fill-chaser start (legacy: Loop C) run_id=%s mode=%s markets=%s db=%s", run_id, mode, markets, DB_PATH)

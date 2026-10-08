@@ -315,7 +315,7 @@ async def test_sell_dispatch_uses_isolated_settings_and_safe_fallback(monkeypatc
                      generate_codex_fast_async=generate, resolve_sell_codex_settings=resolve_sell_codex_settings,
                      parse_llm_json=parse, ticker="TEST", prompt_message="no orders",
                      OpenAIAugmentedLLM=object(), RequestParams=SimpleNamespace,
-                     app=SimpleNamespace(run=host))
+                     app=SimpleNamespace(run=host), REPORT_MODEL="report-model-test")
     namespace[f"_{market.lower()}_codex_runtime_enabled"] = lambda: True
     exec(compile(module, path, "exec"), namespace)
     with caplog.at_level("INFO"):
@@ -336,7 +336,9 @@ async def test_sell_dispatch_uses_isolated_settings_and_safe_fallback(monkeypatc
     else:
         attach.assert_awaited_once()
         params = legacy.await_args.kwargs["request_params"]
-        assert (params.model, params.reasoning_effort, params.maxTokens) == ("gpt-5.6-sol", "high", 30000)
+        # KR legacy fallback follows REPORT_MODEL (PR #15); US keeps its pinned model.
+        expected_model = "report-model-test" if market == "KR" else "gpt-5.6-sol"
+        assert (params.model, params.reasoning_effort, params.maxTokens) == (expected_model, "high", 30000)
         assert host_calls == ["entered", "exited"]
 
 

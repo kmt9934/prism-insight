@@ -31,7 +31,7 @@ import logging
 import math
 import threading
 from datetime import datetime, time
-from time import monotonic
+from time import monotonic, sleep
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -149,19 +149,35 @@ class KisSource:
                         raise Unavailable(f"KIS client unavailable: {exc}") from exc
         return self._client
 
-    def _fetch(self, api_url: str, tr_id: str, params: dict) -> object:
-        try:
-            response = self._trading()._request(api_url, tr_id, params)
-        except Unavailable:
-            raise
-        except Exception as exc:  # transport, auth, rate limit — all "not now"
-            raise Unavailable(f"KIS {tr_id} failed: {exc}") from exc
+    # Seconds to wait before the 2nd and 3rd attempt after a per-second
+    # rejection (EGW00201). Market-data reads are GETs; nothing here posts.
+    _RATE_LIMIT_RETRY_DELAYS_SEC = (1.0, 2.0)
 
-        if not response or not response.isOK():
-            raise Unavailable(
-                f"KIS {tr_id} rejected the request: {self._error_detail(response)}"
-            )
-        return response.getBody()
+    @staticmethod
+    def _is_rate_limited(text: str) -> bool:
+        return "EGW00201" in text or "초당 거래건수" in text
+
+    def _fetch(self, api_url: str, tr_id: str, params: dict) -> object:
+        delays = list(self._RATE_LIMIT_RETRY_DELAYS_SEC)
+        while True:
+            try:
+                response = self._trading()._request(api_url, tr_id, params)
+            except Unavailable:
+                raise
+            except Exception as exc:  # transport, auth, rate limit — all "not now"
+                if delays and self._is_rate_limited(str(exc)):
+                    sleep(delays.pop(0))
+                    continue
+                raise Unavailable(f"KIS {tr_id} failed: {exc}") from exc
+
+            if not response or not response.isOK():
+                detail = self._error_detail(response)
+                if delays and self._is_rate_limited(detail):
+                    logger.info("KIS %s rate limited; retrying in %.0fs", tr_id, delays[0])
+                    sleep(delays.pop(0))
+                    continue
+                raise Unavailable(f"KIS {tr_id} rejected the request: {detail}")
+            return response.getBody()
 
     @staticmethod
     def _error_detail(response) -> str:

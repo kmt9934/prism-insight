@@ -18,6 +18,14 @@ from cores.market_data.kis_source import KisSource  # noqa: E402
 from cores.market_data.source import Unavailable, Unsupported  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _no_rate_limit_backoff(monkeypatch):
+    """EGW00201 retries back off 1s/2s; tests must not really wait."""
+    from cores.market_data import kis_source
+
+    monkeypatch.setattr(kis_source, "sleep", lambda _seconds: None)
+
+
 class _Body:
     def __init__(self, output2):
         self.output2 = output2
@@ -313,7 +321,7 @@ def test_module_imports_without_kis_credentials():
 
     module = importlib.import_module("cores.market_data")
     assert module.KisSource().name == "kis"
-    assert module._DEFAULT_ORDER == "kis"
+    assert module.DEFAULT_ORDER.split(",")[0] == "kis"
 
 
 def test_rejection_reports_why_even_when_the_error_body_is_broken():
@@ -335,3 +343,4 @@ def test_rejection_includes_the_kis_reason():
     client = _FakeClient(ok=False, error="초당 거래건수를 초과하였습니다")
     with pytest.raises(Unavailable, match="초당 거래건수"):
         _source(client).price_history("005930", "20260803", "20260803")
+    assert len(client.calls) == 3  # rate-limit rejections are retried, then reported

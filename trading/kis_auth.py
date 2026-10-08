@@ -1351,12 +1351,40 @@ class APIRespError(APIResp):
 
 
 _GET_RETRY_DELAYS_SEC = (2, 5)
+_rate_limiter_module = None
+_rate_limiter_warned = False
+
+
+def _pace_kis_call():
+    """Wait for a slot in the cross-process KIS call budget (never raises).
+
+    One app key is shared by every loop in the container, so per-process sleeps
+    cannot keep the key under the broker's per-second limit (EGW00201). The
+    limiter only paces; a broken limiter must never block an API call.
+    """
+    global _rate_limiter_module, _rate_limiter_warned
+    try:
+        if _rate_limiter_module is None:
+            try:
+                from trading import kis_rate_limiter as limiter
+            except ImportError:  # kis_auth imported with trading/ on sys.path
+                import kis_rate_limiter as limiter
+            _rate_limiter_module = limiter
+        _rate_limiter_module.acquire(isPaperTrading())
+    except Exception as exc:  # noqa: BLE001 - pacing is best effort
+        if not _rate_limiter_warned:
+            _rate_limiter_warned = True
+            logging.getLogger(__name__).warning(
+                "KIS rate limiter unavailable (%s); calling without shared pacing",
+                type(exc).__name__,
+            )
 
 
 def _get_with_retry(url, headers, params):
     """GET only: POST is never retried because it can place a second order."""
     for delay in (*_GET_RETRY_DELAYS_SEC, None):
         try:
+            _pace_kis_call()
             return requests.get(url, headers=headers, params=params, timeout=30)
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError,
                 requests.exceptions.ChunkedEncodingError) as exc:
@@ -1399,6 +1427,8 @@ def _url_fetch(
 
     if postFlag:
         # if (hashFlag): set_order_hash_key(headers, params)
+        # Paced like GETs, but sent exactly once: an order POST is never retried.
+        _pace_kis_call()
         res = requests.post(url, headers=headers, data=json.dumps(params), timeout=30)
     else:
         res = _get_with_retry(url, headers, params)
