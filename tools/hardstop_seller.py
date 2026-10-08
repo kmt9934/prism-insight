@@ -851,6 +851,11 @@ async def main_async(markets: List[str]) -> int:
     if not HARDSTOP_ENABLED:
         logger.info("HARDSTOP_ENABLED=false -> loop disabled, exiting.")
         return 0
+    from prism_core.market_calendar import drop_closed_kr
+
+    markets = drop_closed_kr(list(markets), logger, "Hardstop")
+    if not markets:
+        return 0
     run_id = uuid.uuid4().hex[:12]
     mode = "LIVE" if HARDSTOP_LIVE else "SHADOW"
     logger.info("Hardstop start (legacy: Loop A) run_id=%s mode=%s markets=%s db=%s", run_id, mode, markets, DB_PATH)

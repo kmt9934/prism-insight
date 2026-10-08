@@ -80,7 +80,7 @@ jobs:
             tests/test_astra_kr_safety.py tests/test_kr_buy_quote_validation.py \
             tests/test_parallel_trading_batch.py tests/test_trading_scenario_retry.py \
             tests/test_stock_tracking_agent_process_reports.py tests/test_kr_pending_entry.py \
-            tests/test_kr_order_budget.py -q
+            tests/test_kr_order_budget.py tests/test_ambiguous_order_response.py -q
           python -m pytest prism-us/tests/test_us_buy_runtime_safety.py \
             prism-us/tests/test_us_parallel_trading_analysis.py \
             prism-us/tests/test_us_stock_tracking_agent_process_reports.py \
@@ -116,6 +116,9 @@ jobs:
             tests/test_kis_previous_snapshot.py tests/test_market_data_sources.py \
             tests/test_market_data_mcp_server.py tests/test_prefetch_auth_outage.py \
             tests/test_trigger_provider_outage.py -q
+          python -m pytest tests/test_kis_rate_limiter.py tests/test_kis_source_rate_retry.py \
+            tests/test_index_freshness.py tests/test_position_mirror_reconcile.py \
+            tests/test_seller_holiday_skip.py -q
 
   dashboard:
     name: Dashboard production build

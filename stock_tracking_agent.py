@@ -551,6 +551,14 @@ class StockTrackingAgent:
         closed_at: str,
     ) -> bool:
         if not self._position_ledger_enabled():
+            self._close_open_mirror_while_disabled(
+                legacy_holding_id=legacy_holding_id,
+                account_key=account_key,
+                exit_price=exit_price,
+                realized_pnl_pct=realized_pnl_pct,
+                exit_kind=exit_kind,
+                closed_at=closed_at,
+            )
             return True
         return mirror_write_fail_open(
             self.cursor,
@@ -569,6 +577,46 @@ class StockTrackingAgent:
                 closed_at=closed_at,
             ),
         )
+
+    def _close_open_mirror_while_disabled(
+        self,
+        *,
+        legacy_holding_id: int,
+        account_key: str,
+        exit_price: float,
+        realized_pnl_pct: float,
+        exit_kind: str | None,
+        closed_at: str,
+    ) -> None:
+        """Keep an existing OPEN mirror row from outliving its sold holding.
+
+        With the shadow ledger switched off nothing new is mirrored, but rows
+        created while it was on stayed OPEN after the holding was sold (058610,
+        061040, 161890 in 2026-09). Only an existing OPEN row is closed; no
+        schema is created and any error is logged and ignored.
+        """
+        try:
+            row = self.cursor.execute(
+                "SELECT status FROM positions WHERE market='KR' "
+                "AND legacy_holding_id=? AND account_id=?",
+                (str(legacy_holding_id), str(account_key or "")),
+            ).fetchone()
+            if row is None or str(row[0]) != "OPEN":
+                return
+            PositionStore(self.cursor).close_legacy_position(
+                market="KR",
+                legacy_holding_id=legacy_holding_id,
+                account_id=account_key,
+                exit_price=exit_price,
+                realized_pnl_pct=realized_pnl_pct,
+                exit_kind=exit_kind,
+                closed_at=closed_at,
+            )
+        except Exception as error:  # noqa: BLE001 - mirror upkeep must not block a sell
+            logger.warning(
+                "[POSITION-SHADOW][KR] stale mirror close skipped: %s",
+                type(error).__name__,
+            )
 
     def _link_position_entry_intent(
         self, *, legacy_holding_id: int, account_key: str, intent_id: str

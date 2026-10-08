@@ -100,6 +100,18 @@ class SourceChain:
         alternative — returning empty — is what let a two-hour outage look like
         "these stocks have no data".
         """
+        return self.fetch_validated(capability, None, *args, **kwargs)
+
+    def fetch_validated(
+        self, capability: str, validate, *args, **kwargs
+    ) -> pd.DataFrame | str:
+        """Like `fetch`, but `validate(result)` may reject an answer.
+
+        `validate` returns None to accept or a short reason to reject. A
+        rejected answer (e.g. an index series that stopped weeks ago) counts as
+        that source failing, so the next source is asked instead of the stale
+        value silently winning.
+        """
         attempts: list[str] = []
         for source in self._sources:
             method = getattr(source, capability, None)
@@ -126,6 +138,18 @@ class SourceChain:
                     exc,
                 )
                 continue
+
+            if validate is not None:
+                reason = validate(result)
+                if reason:
+                    attempts.append(f"{source.name}: {reason}")
+                    logger.warning(
+                        "%s answered %s with rejected data (%s); trying next source",
+                        source.name,
+                        capability,
+                        reason,
+                    )
+                    continue
 
             if source is not self._sources[0]:
                 logger.warning(

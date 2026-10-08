@@ -195,9 +195,13 @@ def fetch_kis_intraday_snapshot(
     min_stock_count: int = 2500,
     max_attempts: int = 3,
     retry_wait_sec: float = 1.0,
-    request_interval_sec: float = 0.1,
+    request_interval_sec: float = 0.5,
 ) -> pd.DataFrame:
-    """Return a complete OHLCV/amount snapshot, 30 tickers per KIS call."""
+    """Return a complete OHLCV/amount snapshot, 30 tickers per KIS call.
+
+    0.5s between calls keeps this loop at or under the mock key's ~2 calls/sec
+    even before the shared limiter in ``trading.kis_rate_limiter`` paces it.
+    """
     codes = sorted({str(code).strip().zfill(6) for code in tickers})
     if len(codes) < min_stock_count:
         raise KisSnapshotError(
@@ -340,7 +344,7 @@ def _is_rate_limited(error: Exception) -> bool:
 
 def fetch_kis_previous_history(
     tickers: Iterable[str], previous_date: str, *, source=None, cache_dir=None,
-    request_interval_sec: float = 0.12, max_duration_sec: float = 900,
+    request_interval_sec: float = 0.5, max_duration_sec: float = 900,
 ) -> pd.DataFrame:
     """Complete dated OHLCV; at most two sequential KIS calls per cold ticker.
 
@@ -348,7 +352,8 @@ def fetch_kis_previous_history(
     rows survive a failed run. Never accept a missing date, fake bars, or a
     previous provider's cache. Retry only failed tickers after the first pass,
     within the original acceptance deadline and consecutive-failure breaker.
-    Cold 2,685 symbols cost at least ~322s plus I/O.
+    Cold 2,685 symbols cost at least ~1,340s plus I/O at the 0.5s default; the
+    07:40 prefetch cron warms the cache so batches fetch only the remainder.
     """
     from cores.market_data.kis_source import KisSource
 

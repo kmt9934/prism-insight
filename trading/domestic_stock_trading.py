@@ -433,6 +433,12 @@ class DomesticStockTrading:
                 }
             else:
                 error_msg = f"{res.getErrorCode()} - {res.getErrorMessage()}"
+                ambiguous = self._resolve_ambiguous_order(
+                    res, stock_code=stock_code, side="buy", quantity=buy_quantity,
+                    error_msg=error_msg, reserved=False,
+                )
+                if ambiguous is not None:
+                    return ambiguous
                 logger.error(f"Buy order failed: {error_msg}")
 
                 return {
@@ -571,6 +577,12 @@ class DomesticStockTrading:
                 }
             else:
                 error_msg = f"{res.getErrorCode()} - {res.getErrorMessage()}"
+                ambiguous = self._resolve_ambiguous_order(
+                    res, stock_code=stock_code, side="buy", quantity=buy_quantity,
+                    error_msg=error_msg, reserved=False,
+                )
+                if ambiguous is not None:
+                    return ambiguous
                 logger.error(f"Limit buy order failed: {error_msg}")
 
                 return {
@@ -740,6 +752,12 @@ class DomesticStockTrading:
                 }
             else:
                 error_msg = f"{res.getErrorCode()} - {res.getErrorMessage()}"
+                ambiguous = self._resolve_ambiguous_order(
+                    res, stock_code=stock_code, side="buy", quantity=buy_quantity,
+                    error_msg=error_msg, reserved=False,
+                )
+                if ambiguous is not None:
+                    return ambiguous
                 logger.error(f"After-hours closing price buy failed: {error_msg}")
 
                 return {
@@ -863,6 +881,12 @@ class DomesticStockTrading:
                 # Reserved order failed - do NOT fallback to market (doesn't work outside hours)
                 # Market buy will fail with APBK0918 "장운영시간이 아닙니다" outside trading hours
                 error_msg = f"{res.getErrorCode()} - {res.getErrorMessage()}"
+                ambiguous = self._resolve_ambiguous_order(
+                    res, stock_code=stock_code, side="buy", quantity=buy_quantity,
+                    error_msg=error_msg, reserved=True,
+                )
+                if ambiguous is not None:
+                    return ambiguous
                 logger.error(f"Reserved buy order failed: {error_msg}")
                 return {
                     'success': False,
@@ -979,6 +1003,12 @@ class DomesticStockTrading:
                 }
             else:
                 error_msg = f"{res.getErrorCode()} - {res.getErrorMessage()}"
+                ambiguous = self._resolve_ambiguous_order(
+                    res, stock_code=stock_code, side="sell", quantity=buy_quantity,
+                    error_msg=error_msg, reserved=False,
+                )
+                if ambiguous is not None:
+                    return ambiguous
                 logger.error(f"Sell order failed: {error_msg}")
 
                 return {
@@ -1136,6 +1166,12 @@ class DomesticStockTrading:
                 }
             else:
                 error_msg = f"{res.getErrorCode()} - {res.getErrorMessage()}"
+                ambiguous = self._resolve_ambiguous_order(
+                    res, stock_code=stock_code, side="sell", quantity=buy_quantity,
+                    error_msg=error_msg, reserved=False,
+                )
+                if ambiguous is not None:
+                    return ambiguous
                 return {
                     'success': False,
                     'order_no': None,
@@ -1261,6 +1297,12 @@ class DomesticStockTrading:
                 # Reserved order failed - do NOT fallback to market (doesn't work outside hours)
                 # Market sell will fail with APBK0918 "장운영시간이 아닙니다" outside trading hours
                 error_msg = f"{res.getErrorCode()} - {res.getErrorMessage()}"
+                ambiguous = self._resolve_ambiguous_order(
+                    res, stock_code=stock_code, side="sell", quantity=buy_quantity,
+                    error_msg=error_msg, reserved=True,
+                )
+                if ambiguous is not None:
+                    return ambiguous
                 logger.error(f"Reserved sell order failed: {error_msg}")
                 return {
                     'success': False,
@@ -1646,6 +1688,107 @@ class DomesticStockTrading:
                     await asyncio.sleep(0.1)
 
         return result
+
+    # Order responses whose outcome is unknown: KIS answered with a gateway
+    # error (IGW00009 "응답전문 구성 중 오류", other HTTP 5xx) after the order may
+    # already have been accepted. 2026-09-15 058610: a "failed" reserved buy
+    # executed at the next open and left a duplicate holding.
+    _AMBIGUOUS_ORDER_CODES = ("IGW00009",)
+    _AMBIGUOUS_MATCH_WINDOW_SEC = 120
+
+    @classmethod
+    def _is_ambiguous_order_response(cls, res) -> bool:
+        try:
+            code = str(res.getErrorCode() or "").strip()
+            message = str(res.getErrorMessage() or "")
+        except Exception:  # noqa: BLE001 - unreadable response is not a clean rejection
+            return True
+        text = f"{code} {message}"
+        if "EGW00201" in text or "초당 거래건수" in text:
+            return False  # throttled before processing: a definite rejection
+        if any(marker in text for marker in cls._AMBIGUOUS_ORDER_CODES):
+            return True
+        return code.isdigit() and int(code) >= 500
+
+    def find_recent_order(self, stock_code: str, side: str, quantity: int,
+                          *, since: datetime.datetime) -> tuple[bool, Optional[Dict[str, Any]]]:
+        """Look up today's order history for a matching order (read-only GET).
+
+        Returns ``(checked, match)``: ``checked`` is False when the history
+        could not be read, so the caller must treat the outcome as unknown.
+        """
+        api_url = "/uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+        tr_id = "TTTC0081R" if self.mode == "real" else "VTTC0081R"
+        today = since.astimezone(KST).strftime("%Y%m%d")
+        params = {
+            "CANO": self.trenv.my_acct,
+            "ACNT_PRDT_CD": self.trenv.my_prod,
+            "INQR_STRT_DT": today,
+            "INQR_END_DT": today,
+            "SLL_BUY_DVSN_CD": "02" if side == "buy" else "01",
+            "PDNO": stock_code,
+            "ORD_GNO_BRNO": "",
+            "ODNO": "",
+            "CCLD_DVSN": "00",
+            "INQR_DVSN": "00",
+            "INQR_DVSN_1": "",
+            "INQR_DVSN_3": "00",
+            "EXCG_ID_DVSN_CD": "KRX",
+            "CTX_AREA_FK100": "",
+            "CTX_AREA_NK100": "",
+        }
+        try:
+            res = self._request_with_retry(api_url, tr_id, params)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[{stock_code}] order-history lookup error: {type(exc).__name__}")
+            return False, None
+        if res is None or not res.isOK():
+            return False, None
+        rows = getattr(res.getBody(), "output1", None)
+        if not isinstance(rows, list):
+            return False, None
+        side_code = "02" if side == "buy" else "01"
+        floor = since.astimezone(KST).strftime("%H%M%S")
+        for row in rows:
+            try:
+                if (str(row.get("pdno", "")).strip() == stock_code
+                        and str(row.get("sll_buy_dvsn_cd", "")).strip() == side_code
+                        and int(float(row.get("ord_qty") or 0)) == int(quantity)
+                        and str(row.get("ord_tmd", "")).strip() >= floor):
+                    return True, dict(row)
+            except (TypeError, ValueError):
+                continue
+        return True, None
+
+    def _resolve_ambiguous_order(self, res, *, stock_code: str, side: str, quantity: int,
+                                 error_msg: str, reserved: bool) -> Optional[Dict[str, Any]]:
+        """Resolve an ambiguous order response; None means "a real rejection".
+
+        Never re-sends the order. A matching row in today's order history makes
+        it a success; a readable history without a match keeps the original
+        failure; anything else (including reserved orders, which only appear
+        in the history once the reservation fires) is reported as unknown so
+        the ledger quarantines it instead of recording a clean failure.
+        """
+        if not self._is_ambiguous_order_response(res):
+            return None
+        logger.warning(f"[{stock_code}] ambiguous {side} order response ({error_msg}); verifying, not retrying")
+        base = {'stock_code': stock_code, 'quantity': quantity}
+        if not reserved:
+            since = datetime.datetime.now(KST) - datetime.timedelta(seconds=self._AMBIGUOUS_MATCH_WINDOW_SEC)
+            time.sleep(1.0)  # let the order reach the history
+            checked, match = self.find_recent_order(stock_code, side, quantity, since=since)
+            if checked and match is not None:
+                order_no = str(match.get("odno") or match.get("ODNO") or "")
+                logger.warning(f"[{stock_code}] {side} order confirmed in order history: order no {order_no}")
+                return {**base, 'success': True, 'order_no': order_no, 'verified_after_ambiguous': True,
+                        'message': f'{side} order confirmed in order history after ambiguous response ({error_msg})'}
+            if checked:
+                logger.warning(f"[{stock_code}] no matching {side} order in history; keeping failure")
+                return None
+        logger.critical(f"[{stock_code}] {side} order outcome UNKNOWN after ambiguous response; check the account")
+        return {**base, 'success': False, 'outcome_unknown': True, 'order_no': None,
+                'message': f'Order outcome unknown after ambiguous response: {error_msg}'}
 
     def _request_with_retry(self, api_url: str, tr_id: str, params: Dict[str, Any], attempts: int = 3):
         """

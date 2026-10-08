@@ -983,6 +983,11 @@ async def main_async(markets: List[str]) -> int:
     if not TREND_EXIT_ENABLED:
         logger.info("TREND_EXIT_ENABLED=false -> loop disabled, exiting.")
         return 0
+    from prism_core.market_calendar import drop_closed_kr
+
+    markets = drop_closed_kr(list(markets), logger, "Trend-exit")
+    if not markets:
+        return 0
     run_id = uuid.uuid4().hex[:12]
     mode = "LIVE" if TREND_EXIT_LIVE else "SHADOW"
     logger.info("Trend-exit start (legacy: Loop B) run_id=%s mode=%s markets=%s confirm=%d close_window=%s db=%s",
