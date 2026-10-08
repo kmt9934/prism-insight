@@ -321,7 +321,7 @@ def test_module_imports_without_kis_credentials():
 
     module = importlib.import_module("cores.market_data")
     assert module.KisSource().name == "kis"
-    assert module._DEFAULT_ORDER == "kis"
+    assert module.DEFAULT_ORDER.split(",")[0] == "kis"
 
 
 def test_rejection_reports_why_even_when_the_error_body_is_broken():
