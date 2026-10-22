@@ -40,6 +40,13 @@ class _Clock:
         self.now += seconds
 
 
+@pytest.fixture(autouse=True)
+def _burst_window_only(monkeypatch):
+    # These tests cover the sliding window; even spacing is covered in
+    # test_kis_egw00201_retry.py.
+    monkeypatch.setenv("PRISM_KIS_MIN_INTERVAL_PAPER_SEC", "0")
+
+
 @pytest.fixture
 def state_file(tmp_path, monkeypatch):
     path = tmp_path / "kis_rate.state"

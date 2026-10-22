@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import random
 import time
 import threading
 import warnings
@@ -1397,6 +1398,60 @@ def _get_with_retry(url, headers, params):
             time.sleep(delay)
 
 
+def _is_rate_limited_response(res) -> bool:
+    """KIS per-second rejection (EGW00201 "초당 거래건수 초과"). Never raises."""
+    try:
+        if res is None or res.status_code == 200:
+            return False
+        text = res.text or ""
+    except Exception:  # noqa: BLE001
+        return False
+    return "EGW00201" in text or "초당 거래건수" in text
+
+
+def _note_kis_rate_limited():
+    """Tell every process to back off for a moment (best effort, never raises)."""
+    try:
+        if _rate_limiter_module is not None:
+            _rate_limiter_module.note_rate_limited()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _rate_retry_delays():
+    """Backoff (seconds) before re-sending a GET that KIS rejected with EGW00201.
+
+    ``PRISM_KIS_RATE_RETRY_MAX`` (default 4, 0 disables) attempts, doubling from
+    ``PRISM_KIS_RATE_RETRY_BASE_SEC`` (default 0.5) with a little jitter.
+    """
+    def _num(name, default, cast):
+        try:
+            return cast((os.getenv(name) or "").strip() or default)
+        except ValueError:
+            return default
+    attempts = max(0, min(_num("PRISM_KIS_RATE_RETRY_MAX", 4, int), 8))
+    base = max(0.1, min(_num("PRISM_KIS_RATE_RETRY_BASE_SEC", 0.5, float), 5.0))
+    return [base * (2 ** i) + random.uniform(0, 0.25) for i in range(attempts)]
+
+
+def _get_with_rate_retry(url, headers, params, tr_id=""):
+    """GET with backoff on EGW00201: reads are safe to repeat, and a throttled
+    read used to surface as "Current price query failed" (2026-10-21/22)."""
+    delays = _rate_retry_delays()
+    while True:
+        res = _get_with_retry(url, headers, params)
+        if not _is_rate_limited_response(res):
+            return res
+        _note_kis_rate_limited()
+        if not delays:
+            return res
+        delay = delays.pop(0)
+        logging.getLogger(__name__).info(
+            "KIS %s rate limited (EGW00201); retrying in %.1fs", tr_id or "GET", delay
+        )
+        time.sleep(delay)
+
+
 def _url_fetch(
         api_url, ptr_id, tr_cont, params, appendHeaders=None, postFlag=False, hashFlag=True
 ):
@@ -1430,8 +1485,10 @@ def _url_fetch(
         # Paced like GETs, but sent exactly once: an order POST is never retried.
         _pace_kis_call()
         res = requests.post(url, headers=headers, data=json.dumps(params), timeout=30)
+        if _is_rate_limited_response(res):
+            _note_kis_rate_limited()
     else:
-        res = _get_with_retry(url, headers, params)
+        res = _get_with_rate_retry(url, headers, params, tr_id)
 
     if res.status_code == 200:
         ar = APIResp(res)

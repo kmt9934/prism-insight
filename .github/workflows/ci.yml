@@ -116,7 +116,7 @@ jobs:
             tests/test_kis_previous_snapshot.py tests/test_market_data_sources.py \
             tests/test_market_data_mcp_server.py tests/test_prefetch_auth_outage.py \
             tests/test_trigger_provider_outage.py -q
-          python -m pytest tests/test_kis_rate_limiter.py tests/test_kis_source_rate_retry.py \
+          python -m pytest tests/test_kis_rate_limiter.py tests/test_kis_source_rate_retry.py tests/test_kis_egw00201_retry.py \
             tests/test_index_freshness.py tests/test_position_mirror_reconcile.py \
             tests/test_seller_holiday_skip.py -q
 
