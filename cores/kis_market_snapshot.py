@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 import json
+import logging
 import math
 import os
 import struct
@@ -20,6 +21,10 @@ import zipfile
 
 import pandas as pd
 import requests
+
+logger = logging.getLogger(__name__)
+
+_ACTIVE_ZERO_CAP_LIMIT = 20
 
 
 @dataclass(frozen=True)
@@ -281,6 +286,38 @@ def _valid_history_row(row) -> bool:
         return True  # Suspended session: zero OHLC is actual KIS data, not fabricated.
     return (0 < values["Low"] <= min(values["Open"], values["Close"])
             <= max(values["Open"], values["Close"]) <= values["High"])
+
+
+def _active_zero_cap_codes(master: KisMasterData, snapshot: pd.DataFrame, zero_cap: list[str]) -> list[str]:
+    """Zero-cap master rows that still show master or intraday trading activity."""
+    active: list[str] = []
+    for code in zero_cap:
+        try:
+            prev = float(master.previous_volumes.get(code, 0))
+            prev_active = math.isfinite(prev) and prev != 0
+        except (TypeError, ValueError):
+            prev_active = False
+        volume = float(snapshot.at[code, "Volume"])
+        amount = float(snapshot.at[code, "Amount"])
+        if prev_active or volume != 0 or amount != 0:
+            active.append(code)
+    return active
+
+
+def _guard_active_zero_cap(master: KisMasterData, snapshot: pd.DataFrame, zero_cap: list[str]) -> None:
+    active = _active_zero_cap_codes(master, snapshot, zero_cap)
+    for code in active:
+        logger.warning(
+            "KIS zero-cap exclusion: active code=%s master_prev_volume=%s intraday_volume=%s intraday_amount=%s",
+            code,
+            master.previous_volumes.get(code),
+            snapshot.at[code, "Volume"],
+            snapshot.at[code, "Amount"],
+        )
+    if len(active) > _ACTIVE_ZERO_CAP_LIMIT:
+        raise KisSnapshotError(
+            f"Too many active zero-cap master rows ({len(active)}>{_ACTIVE_ZERO_CAP_LIMIT})"
+        )
 
 
 def _master_volume_match_kind(master_volume, daily_volume) -> str | None:
@@ -546,15 +583,12 @@ def build_kis_snapshot_bundle(
         raise KisSnapshotError("KIS master previous-cap coverage incomplete")
     zero_cap = cap.index[cap["시가총액"] == 0].tolist()
     if zero_cap:
-        # A published zero-cap, zero-activity issue (e.g. a suspended SPAC)
-        # cannot pass ANY existing liquidity trigger. Verify it is nontrading
-        # rather than fabricating a dated bar if history is no longer served.
+        # Zero-cap master rows cannot pass cap-based screening. Exclude all of
+        # them; warn on rows that still trade (e.g. preferreds with cap=0).
         probe = snapshot_fetcher(codes)
         if set(probe.index) != set(codes):
             raise KisSnapshotError("KIS current snapshot coverage incomplete")
-        if (any(master.previous_volumes.get(code) != 0 for code in zero_cap)
-                or (probe.loc[zero_cap, ["Volume", "Amount"]] != 0).any().any()):
-            raise KisSnapshotError("Active stock has zero KIS master market cap")
+        _guard_active_zero_cap(master, probe, zero_cap)
         codes = [code for code in codes if code not in zero_cap]
         cap = cap.loc[codes].copy()
         if not codes:
@@ -613,8 +647,7 @@ def build_kis_snapshot_bundle(
     if set(snapshot.index) != set(codes) | set(zero_cap):
         raise KisSnapshotError("KIS current snapshot coverage incomplete")
     if zero_cap:
-        if (snapshot.loc[zero_cap, ["Volume", "Amount"]] != 0).any().any():
-            raise KisSnapshotError("Excluded zero-cap issue became active during history collection")
+        _guard_active_zero_cap(master, snapshot, zero_cap)
         snapshot = snapshot.loc[codes].copy()
     cap.attrs.update(source="kis_master", trade_date=prev_date, unit="KRW", precision_krw=100_000_000)
     cap.attrs.update(master_volume_validation="exact_or_observed_binary32_rendering",
