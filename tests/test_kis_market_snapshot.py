@@ -228,13 +228,13 @@ def test_official_master_previous_cap_units_and_market_fields():
     assert master.industry_codes == {"005930": "0013", "247540": "0021"}
 
 
-@pytest.mark.parametrize("problem", ["missing_cap", "stale_master", "volume_mismatch", "missing_previous", "missing_current", "active_zero_cap"])
+@pytest.mark.parametrize("problem", ["missing_cap", "stale_master", "volume_mismatch", "missing_previous", "missing_current"])
 def test_bundle_fails_closed_on_unverifiable_coverage(monkeypatch, problem):
     import cores.kis_market_snapshot as module
     monkeypatch.setattr(module, "_today_kst", lambda: "20260911")
     frame = pd.DataFrame({"Open": [10], "High": [12], "Low": [9], "Close": [11],
                           "Volume": [100], "Amount": [1100]}, index=["005930"])
-    cap_value = float("nan") if problem == "missing_cap" else 0 if problem == "active_zero_cap" else 1000000
+    cap_value = float("nan") if problem == "missing_cap" else 1000000
     master = KisMasterData(
         {"005930": "삼성전자"}, pd.DataFrame({"시가총액": [cap_value]}, index=frame.index),
         {"005930": "19750611"}, "20260910" if problem == "stale_master" else "20260911",
@@ -286,7 +286,54 @@ def test_zero_cap_excluded_only_on_published_nontrading_evidence(monkeypatch):
     assert bundle.cap_df.attrs["precision_krw"] == 100000000
 
 
-def test_zero_cap_issue_reactivation_during_cold_history_fails(monkeypatch):
+def test_active_zero_cap_preferred_is_excluded_with_warning(monkeypatch, caplog):
+    import cores.kis_market_snapshot as module
+    monkeypatch.setattr(module, "_today_kst", lambda: "20260911")
+    frame = pd.DataFrame({"Open": [10, 5], "High": [12, 6], "Low": [9, 4],
+                          "Close": [11, 5], "Volume": [100, 50], "Amount": [1100, 250]},
+                         index=["005930", "004415"])
+    master = KisMasterData(
+        {"005930": "삼성전자", "004415": "서울식품우"},
+        pd.DataFrame({"시가총액": [1000000, 0]}, index=frame.index),
+        {"005930": "19750611", "004415": "19950101"}, "20260911", {}, {},
+        {"005930": 100, "004415": 183731},
+    )
+    with caplog.at_level("WARNING"):
+        bundle = build_kis_snapshot_bundle(
+            "20260911", master_fetcher=lambda: master,
+            snapshot_fetcher=lambda codes: frame.loc[codes],
+            history_fetcher=lambda codes, date: frame.loc[codes],
+        )
+    assert bundle.snapshot.index.tolist() == ["005930"]
+    assert bundle.snapshot.attrs["nontrading_zero_cap_excluded"] == ["004415"]
+    assert "004415" in caplog.text
+    assert "183731" in caplog.text
+
+
+def test_too_many_active_zero_cap_master_rows_fail(monkeypatch):
+    import cores.kis_market_snapshot as module
+    monkeypatch.setattr(module, "_today_kst", lambda: "20260911")
+    zero_codes = [f"{index:06d}" for index in range(1, 22)]
+    index = ["005930", *zero_codes]
+    rows = {"Open": [10] + [1] * 21, "High": [12] + [2] * 21, "Low": [9] + [1] * 21,
+            "Close": [11] + [1] * 21, "Volume": [100] + [1] * 21, "Amount": [1100] + [10] * 21}
+    frame = pd.DataFrame(rows, index=index)
+    caps = [1000000] + [0] * 21
+    master = KisMasterData(
+        {code: name for code, name in zip(index, ["삼성전자", *["우선주"] * 21])},
+        pd.DataFrame({"시가총액": caps}, index=index),
+        {code: "19950101" for code in index}, "20260911", {}, {},
+        {code: (100 if code == "005930" else 1) for code in index},
+    )
+    with pytest.raises(KisSnapshotError, match="Too many active zero-cap"):
+        build_kis_snapshot_bundle(
+            "20260911", master_fetcher=lambda: master,
+            snapshot_fetcher=lambda codes: frame.loc[codes],
+            history_fetcher=lambda codes, date: frame.loc[codes],
+        )
+
+
+def test_zero_cap_issue_reactivation_during_cold_history_warns_and_excludes(monkeypatch, caplog):
     import cores.kis_market_snapshot as module
     monkeypatch.setattr(module, "_today_kst", lambda: "20260911")
     frame = pd.DataFrame({"Open": [10, 0], "High": [12, 0], "Low": [9, 0],
@@ -302,13 +349,16 @@ def test_zero_cap_issue_reactivation_during_cold_history_fails(monkeypatch):
         out = frame.loc[codes].copy()
         if calls:
             out.loc["472220", "Volume"] = 1
+            out.loc["472220", "Amount"] = 10
         calls.append(True)
         return out
-    with pytest.raises(KisSnapshotError, match="became active"):
-        build_kis_snapshot_bundle(
+    with caplog.at_level("WARNING"):
+        bundle = build_kis_snapshot_bundle(
             "20260911", master_fetcher=lambda: master,
             snapshot_fetcher=snapshot, history_fetcher=lambda codes, date: frame.loc[codes],
         )
+    assert bundle.snapshot.index.tolist() == ["005930"]
+    assert "472220" in caplog.text
 
 
 @pytest.mark.parametrize("rollover", ["before_quote", "after_quote"])
